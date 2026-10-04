@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 2,
+  "kind": "canvas",
+  "id": "overview-detail",
+  "title": "Overview Detail",
+  "frames": [
+    {
+      "id": "overview",
+      "kind": "graph",
+      "graph": {
+        "schemaVersion": 2,
+        "kind": "graph",
+        "id": "sample-sequence",
+        "title": "Sample Sequence",
+        "model": "path",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Collect",
+            "shape": "circle",
+            "labelPosition": "above",
+            "caption": "First"
+          },
+          {
+            "id": "b",
+            "label": "Sort",
+            "shape": "circle",
+            "labelPosition": "above",
+            "caption": "Next"
+          },
+          {
+            "id": "c",
+            "label": "Store",
+            "shape": "circle",
+            "labelPosition": "above",
+            "caption": "Later"
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "source": "a",
+            "target": "b"
+          },
+          {
+            "id": "bc",
+            "source": "b",
+            "target": "c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "detail",
+      "kind": "graph",
+      "graph": {
+        "schemaVersion": 2,
+        "kind": "graph",
+        "id": "sample-dependencies",
+        "title": "Sample Dependencies",
+        "model": "dag",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Prepare"
+          },
+          {
+            "id": "b",
+            "label": "Check"
+          },
+          {
+            "id": "c",
+            "label": "Package"
+          },
+          {
+            "id": "d",
+            "label": "Complete"
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "source": "a",
+            "target": "b"
+          },
+          {
+            "id": "ac",
+            "source": "a",
+            "target": "c"
+          },
+          {
+            "id": "bd",
+            "source": "b",
+            "target": "d"
+          },
+          {
+            "id": "cd",
+            "source": "c",
+            "target": "d"
+          }
+        ]
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "expansion",
+      "source": {
+        "frameId": "overview",
+        "elementIds": [
+          "b"
+        ]
+      },
+      "target": {
+        "frameId": "detail"
+      },
+      "label": "Expands selected step",
+      "provenance": "supplied"
+    }
+  ]
+}

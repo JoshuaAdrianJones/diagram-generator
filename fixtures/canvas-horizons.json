@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "kind": "canvas",
+  "id": "time-horizons",
+  "title": "Time Horizons",
+  "frames": [
+    {
+      "id": "horizons",
+      "kind": "graph",
+      "graph": {
+        "schemaVersion": 2,
+        "kind": "graph",
+        "id": "ordered-horizons",
+        "title": "Ordered Horizons",
+        "model": "lanes",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Sample",
+            "lane": "early",
+            "row": "first",
+            "shape": "circle",
+            "labelPosition": "above",
+            "style": {
+              "fill": "#e878a0"
+            }
+          },
+          {
+            "id": "b",
+            "label": "Observe",
+            "lane": "middle",
+            "row": "first",
+            "shape": "circle",
+            "labelPosition": "above"
+          },
+          {
+            "id": "c",
+            "label": "Repeat",
+            "lane": "late",
+            "row": "first",
+            "shape": "circle",
+            "labelPosition": "above"
+          },
+          {
+            "id": "d",
+            "label": "Draft",
+            "lane": "early",
+            "row": "second",
+            "shape": "circle",
+            "labelPosition": "above"
+          },
+          {
+            "id": "e",
+            "label": "Review",
+            "lane": "middle",
+            "row": "second",
+            "shape": "circle",
+            "labelPosition": "above",
+            "style": {
+              "fill": "#e878a0"
+            }
+          },
+          {
+            "id": "f",
+            "label": "Retain",
+            "lane": "late",
+            "row": "second",
+            "shape": "circle",
+            "labelPosition": "above"
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "source": "a",
+            "target": "b"
+          },
+          {
+            "id": "bc",
+            "source": "b",
+            "target": "c"
+          },
+          {
+            "id": "de",
+            "source": "d",
+            "target": "e"
+          },
+          {
+            "id": "ef",
+            "source": "e",
+            "target": "f"
+          }
+        ],
+        "lanes": [
+          {
+            "id": "early",
+            "label": "Immediate",
+            "caption": "Days"
+          },
+          {
+            "id": "middle",
+            "label": "Intermediate",
+            "caption": "Weeks"
+          },
+          {
+            "id": "late",
+            "label": "Later",
+            "caption": "Months"
+          }
+        ],
+        "rows": [
+          {
+            "id": "first",
+            "label": "First sample"
+          },
+          {
+            "id": "second",
+            "label": "Second sample"
+          }
+        ]
+      }
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note",
+      "text": "Synthetic illustration",
+      "position": {
+        "x": 32,
+        "y": 1250
+      },
+      "style": {
+        "presentation": "sticky"
+      }
+    }
+  ]
+}
