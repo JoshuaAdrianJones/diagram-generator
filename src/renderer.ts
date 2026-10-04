@@ -4,21 +4,29 @@ import { fileURLToPath } from 'node:url';
 import * as fontkit from 'fontkit';
 import rough from 'roughjs';
 import type { RoughGenerator } from 'roughjs/bin/generator.js';
-import { hashSpec, type DiagramSpec, type EdgeSpec, type NodeSpec, type Style } from './schema.js';
+import { hashSpec } from './schema.js';
+import type { RenderGraph as DiagramSpec, GraphNode as NodeSpec, DocumentStyle as Style } from './documents.js';
+import type { Static } from '@sinclair/typebox';
+import type { GraphEdgeSchema } from './documents.js';
+import { placeModel, nodeFootprint } from './graph-layout.js';
+type EdgeSpec = Static<typeof GraphEdgeSchema>;
+export type FontName = 'body' | 'heading' | 'sans';
 export { hashSpec } from './schema.js';
 import { boundary, bottom, center, contains, cubic, expand, overlaps, pathBounds, pathHitsBox, pathsIntersect, polyline, quadratic, right, union, type Bounds, type Point } from './geometry.js';
 export type { Bounds, Point } from './geometry.js';
 
 export interface Diagnostic { severity: 'error' | 'warning' | 'info'; code: string; ids: string[]; bounds: Bounds; message: string; repairClasses: string[] }
-export interface NodeGeometry extends Bounds { id: string; bounds?: Bounds; seed: number; textBounds: Bounds; lines: string[]; fontSize: number; font: 'body' | 'heading' }
-export interface EdgeGeometry { id: string; bounds?: Bounds; path: string; points: Point[]; seed: number; labelBounds?: Bounds; labelLines?: string[]; arrowheads: Bounds[]; arrowPolygons: Point[][]; fontSize: number; font?: 'body' | 'heading' }
+export interface NodeGeometry extends Bounds { captionBounds?: Bounds; captionLines?: string[]; labelPosition?: NodeSpec['labelPosition']; id: string; bounds?: Bounds; seed: number; textBounds: Bounds; lines: string[]; fontSize: number; font: FontName }
+export interface EdgeGeometry { id: string; bounds?: Bounds; path: string; points: Point[]; seed: number; labelBounds?: Bounds; labelLines?: string[]; arrowheads: Bounds[]; arrowPolygons: Point[][]; fontSize: number; font?: FontName }
 export interface GroupGeometry extends Bounds { id: string; bounds?: Bounds; seed: number; titleBounds: Bounds; titleLines: string[] }
-export interface NoteGeometry extends Bounds { id: string; bounds?: Bounds; seed: number; textBounds: Bounds; lines: string[]; fontSize: number; font?: 'body' | 'heading' }
+export interface NoteGeometry extends Bounds { id: string; bounds?: Bounds; seed: number; textBounds: Bounds; lines: string[]; fontSize: number; font?: FontName }
 export interface LayoutState {
   specHash: string; engineVersion: string; fontVersion: string;
   nodes: Record<string, NodeGeometry>; edges: Record<string, EdgeGeometry>; groups: Record<string, GroupGeometry>; notes: Record<string, NoteGeometry>;
+  lanes?: Record<string, LaneGeometry>; rows?: Record<string, LaneGeometry>;
   viewport: Bounds; bounds?: Bounds; titleBounds?: Bounds; subtitleBounds?: Bounds; legendBounds?: Bounds;
 }
+export interface LaneGeometry extends Bounds { id: string; titleBounds: Bounds; titleLines: string[]; captionBounds?: Bounds; captionLines?: string[] }
 export interface RenderResult { svg: string; debugSvg: string; layout: LayoutState; diagnostics: Diagnostic[] }
 export const ENGINE_VERSION = '1.0.0';
 export const FONT_VERSION = 'bangers-regular-caveat-variable-2026-10';
@@ -38,13 +46,27 @@ function getFonts(): Fonts {
   fonts = { body: fontkit.openSync(paths.body) as fontkit.Font, heading: fontkit.openSync(paths.heading) as fontkit.Font, bodyData: readFileSync(paths.body).toString('base64'), headingData: readFileSync(paths.heading).toString('base64') };
   return fonts;
 }
+let sans: { font: fontkit.Font; data: string } | undefined;
+function getSans() {
+  if(sans) return sans;
+  const filename = fileURLToPath(new URL('NotoSans-Variable.ttf', new URL('.', 'file://' + fontPaths().body)));
+  if(!existsSync(filename)) throw new Error('Missing bundled Noto Sans font. Restore application assets.');
+  sans = {font: fontkit.openSync(filename) as fontkit.Font, data: readFileSync(filename).toString('base64')};
+  return sans;
+}
+export function getFont(font: FontName): fontkit.Font { return font === 'sans' ? getSans().font : getFonts()[font]; }
+export function fontCss(includeSans = false): string {
+  const loaded=getFonts();
+  return `@font-face{font-family:SketchBody;src:url(data:font/ttf;base64,${loaded.bodyData}) format('truetype');font-weight:400;font-style:normal}@font-face{font-family:SketchHeading;src:url(data:font/ttf;base64,${loaded.headingData}) format('truetype');font-weight:400;font-style:normal}${includeSans ? `@font-face{font-family:DiagramSans;src:url(data:font/ttf;base64,${getSans().data}) format('truetype');font-weight:400;font-style:normal}` : ''}text{font-kerning:normal}`;
+}
+function defaultFont(spec: DiagramSpec, heading = false): FontName { return spec.schemaVersion === 2 ? (heading ? spec.theme?.font === 'sans' || spec.theme?.preset === 'clean' && !spec.theme?.font ? 'sans' : 'heading' : spec.theme?.font ?? (spec.theme?.preset === 'clean' ? 'sans' : 'body')) : heading ? 'heading' : 'body'; }
 function seed(id: string, old?: number): number { return old ?? (parseInt(createHash('sha256').update(id).digest('hex').slice(0, 8), 16) % 2147483646) + 1; }
-export function measureText(text: string, size = BODY_SIZE, font: 'body' | 'heading' = 'body'): number {
-  const loaded = getFonts()[font];
+export function measureText(text: string, size = BODY_SIZE, font: FontName = 'body'): number {
+  const loaded = getFont(font);
   return loaded.layout(text).positions.reduce((sum, item) => sum + item.xAdvance, 0) / loaded.unitsPerEm * size;
 }
-function lineHeight(size: number): number { return size * 1.4; }
-function wrapText(text: string, maxWidth: number, size: number, font: 'body' | 'heading' = 'body'): string[] {
+export function lineHeight(size: number): number { return size * 1.4; }
+export function wrapText(text: string, maxWidth: number, size: number, font: FontName = 'body'): string[] {
   const lines: string[] = [];
   for (const paragraph of text.split('\n')) {
     if (!paragraph.trim()) { lines.push(''); continue; }
@@ -57,34 +79,47 @@ function wrapText(text: string, maxWidth: number, size: number, font: 'body' | '
   }
   return lines;
 }
-function textMeasure(lines: string[], size: number, font: 'body' | 'heading' = 'body'): { width: number; height: number } {
+export function textMeasure(lines: string[], size: number, font: FontName = 'body'): { width: number; height: number } {
   return { width: Math.max(1, ...lines.map(line => measureText(line, size, font))), height: Math.max(1, lines.length) * lineHeight(size) };
 }
 function diagnostic(severity: Diagnostic['severity'], code: string, ids: string[], bounds: Bounds, message: string, repairClasses: string[]): Diagnostic { return { severity, code, ids, bounds, message, repairClasses }; }
 function styleFor(spec: DiagramSpec, style?: Style): Required<Pick<Style, 'stroke' | 'fill' | 'strokeWidth' | 'roughness' | 'font' | 'fontSize' | 'emphasis'>> {
   const theme = spec.theme;
-  return { stroke: style?.stroke ?? theme?.stroke ?? '#28303a', fill: style?.fill ?? theme?.fill ?? '#ffffff', strokeWidth: (style?.strokeWidth ?? theme?.strokeWidth ?? 1.5) * (style?.emphasis === 'strong' ? 1.4 : 1), roughness: theme?.preset === 'clean' ? 0 : (style?.roughness ?? theme?.roughness ?? 0.6), font: style?.font ?? theme?.font ?? 'body', fontSize: style?.fontSize ?? theme?.fontSize ?? BODY_SIZE, emphasis: style?.emphasis ?? theme?.emphasis ?? 'normal' };
+  return { stroke: style?.stroke ?? theme?.stroke ?? '#28303a', fill: style?.fill ?? theme?.fill ?? '#ffffff', strokeWidth: (style?.strokeWidth ?? theme?.strokeWidth ?? 1.5) * (style?.emphasis === 'strong' ? 1.4 : 1), roughness: spec.schemaVersion === 1 && theme?.preset === 'clean' ? 0 : (style?.roughness ?? theme?.roughness ?? (theme?.preset === 'clean' ? 0 : 0.6)), font: style?.font ?? (spec.schemaVersion===1?theme?.font??'body':defaultFont(spec)), fontSize: style?.fontSize ?? theme?.fontSize ?? BODY_SIZE, emphasis: style?.emphasis ?? theme?.emphasis ?? 'normal' };
 }
 function makeNode(spec: DiagramSpec, node: NodeSpec, previous?: NodeGeometry): NodeGeometry {
   const style = styleFor(spec, node.style), size = style.fontSize;
-  const lines = wrapText(node.label, (node.width ?? 280) - PADDING * 2, size, style.font);
+  const lines = wrapText(node.label, (node.labelPosition && node.labelPosition !== 'inside' ? Math.max(node.width ?? 0,280) : node.width ?? 280) - PADDING * 2, size, style.font);
   const measured = textMeasure(lines, size, style.font);
-  const ellipseFactor = node.shape === 'ellipse' ? Math.SQRT2 : 1;
-  const width = node.width ?? Math.max(100, measured.width * ellipseFactor + PADDING * 2), height = node.height ?? Math.max(58, measured.height * ellipseFactor + PADDING * 2);
-  return { id: node.id, x: previous?.x ?? 0, y: previous?.y ?? 0, width, height, seed: seed(`node:${node.id}`, previous?.seed), lines, fontSize: size, font: style.font, textBounds: { x: 0, y: 0, ...measured } };
+  const outside = node.labelPosition && node.labelPosition !== 'inside';
+  const ellipseFactor = node.shape === 'ellipse' || node.shape === 'circle' ? Math.SQRT2 : 1;
+  let width = node.width ?? (outside ? 80 : Math.max(100, measured.width * ellipseFactor + PADDING * 2)), height = node.height ?? (outside ? 80 : Math.max(58, measured.height * ellipseFactor + PADDING * 2));
+  if(node.shape === 'circle') width = height = node.width ?? node.height ?? Math.max(width,height);
+  const captionLines=node.caption ? wrapText(node.caption,Math.max(248,width),20,style.font) : undefined;
+  const captionBounds=captionLines ? {x:0,y:0,...textMeasure(captionLines,20,style.font)} : undefined;
+  const geometry: NodeGeometry = { captionLines, captionBounds, labelPosition: node.labelPosition, id: node.id, x: previous?.x ?? 0, y: previous?.y ?? 0, width, height, seed: seed(`node:${node.id}`, previous?.seed), lines, fontSize: size, font: style.font, textBounds: { x: 0, y: 0, ...measured } };
+  updateNodeText(geometry); return geometry;
 }
-function updateNodeText(node: NodeGeometry) { node.textBounds.x = node.x + (node.width - node.textBounds.width) / 2; node.textBounds.y = node.y + (node.height - node.textBounds.height) / 2; }
+function updateNodeText(node: NodeGeometry) {
+  node.textBounds.x = node.x + (node.width - node.textBounds.width) / 2; node.textBounds.y = node.y + (node.height - node.textBounds.height) / 2;
+  if(node.labelPosition === 'above') node.textBounds.y = node.y - node.textBounds.height - 12;
+  if(node.labelPosition === 'below') node.textBounds.y = bottom(node) + 12;
+  if(node.labelPosition === 'left') node.textBounds.x = node.x - node.textBounds.width - 12;
+  if(node.labelPosition === 'right') node.textBounds.x = right(node) + 12;
+  if(node.captionBounds) {node.captionBounds.x=node.x+(node.width-node.captionBounds.width)/2;node.captionBounds.y=Math.max(bottom(node),bottom(node.textBounds))+12;}
+}
 function pinnedIds(spec: DiagramSpec): Set<string> { return new Set([...spec.nodes.filter(node => node.pinned).map(node => node.id), ...(spec.layout?.pins ?? []), ...(spec.layout?.fixed ?? []).map(item => item.nodeId)]); }
 function groupMembers(spec: DiagramSpec, id: string): string[] { return [...new Set([...(spec.groups?.find(g => g.id === id)?.members ?? []), ...spec.nodes.filter(node => node.group === id).map(node => node.id)])]; }
 function nodeBoundary(node: NodeGeometry, spec: NodeSpec, toward: Point): Point {
   const radius = !spec.shape || spec.shape === 'roundedRectangle' ? Math.min(14, node.width / 4, node.height / 4) : 0;
-  return boundary(node, toward, spec.shape === 'ellipse', radius);
+  return boundary(node, toward, spec.shape === 'ellipse' || spec.shape === 'circle', radius);
 }
 function orderedNodes(spec: DiagramSpec): NodeSpec[] {
   const order = spec.layout?.order ?? [], rank = new Map(order.map((id, i) => [id, i]));
   return [...spec.nodes].sort((a, b) => (rank.get(a.id) ?? 100000) - (rank.get(b.id) ?? 100000));
 }
 function initialPositions(spec: DiagramSpec, nodes: Record<string, NodeGeometry>, startY: number): void {
+  if(placeModel(spec,nodes,startY)) return;
   const gap = spec.layout?.gap ?? 80, strategy = spec.layout?.strategy ?? 'flow';
   const list = orderedNodes(spec).map(node => nodes[node.id]!);
   if (strategy === 'cycle' || strategy === 'radial') {
@@ -144,19 +179,20 @@ function placeNodes(spec: DiagramSpec, previous: LayoutState | undefined, diagno
     if (pinned.has(node.id) && (Math.abs(node.x - desired.x) > 0.5 || Math.abs(node.y - desired.y) > 0.5)) diagnostics.push(diagnostic('error', 'pinned_constraint_conflict', [node.id, other.id], union([node, other]), 'The pinned position conflicts with a relative placement constraint.', ['change_constraints']));
     else { node.x = desired.x; node.y = desired.y; }
   }
+  for(const node of Object.values(nodes)) updateNodeText(node);
   const list = Object.values(nodes), moved = new Set<string>();
   for (let pass = 0; pass < list.length * 3; pass++) {
     let changed = false;
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const a = list[i]!, b = list[j]!;
-      if (!overlaps(a, b, 20) || (pinned.has(a.id) && pinned.has(b.id))) continue;
+      if (!overlaps(nodeFootprint(a), nodeFootprint(b), 20) || (pinned.has(a.id) && pinned.has(b.id))) continue;
       const moving = pinned.has(b.id) ? a : b, fixed = moving === a ? b : a;
       const candidates = [
-        { x: right(fixed) + 24, y: moving.y }, { x: moving.x, y: bottom(fixed) + 24 },
+        { x: right(nodeFootprint(fixed)) + 24 + moving.x - nodeFootprint(moving).x, y: moving.y }, { x: moving.x, y: bottom(nodeFootprint(fixed)) + 24 + moving.y - nodeFootprint(moving).y },
         { x: fixed.x - moving.width - 24, y: moving.y }, { x: moving.x, y: fixed.y - moving.height - 24 },
       ].filter(p => p.y >= startY && p.x >= 28).sort((p, q) => Math.hypot(p.x - moving.x, p.y - moving.y) - Math.hypot(q.x - moving.x, q.y - moving.y));
-      const valid = candidates.find(p => !list.some(other => other !== moving && overlaps({ ...moving, ...p }, other, 20))) ?? candidates[0];
-      if (valid) { moving.x = valid.x; moving.y = valid.y; moved.add(moving.id); changed = true; }
+      const valid = candidates.find(p => {const candidate={...moving,...p,textBounds:{...moving.textBounds},captionBounds:moving.captionBounds?{...moving.captionBounds}:undefined};updateNodeText(candidate);return !list.some(other => other !== moving && overlaps(nodeFootprint(candidate), nodeFootprint(other), 20));}) ?? candidates[0];
+      if (valid) { moving.x = valid.x; moving.y = valid.y; updateNodeText(moving); moved.add(moving.id); changed = true; }
     }
     if (!changed) break;
   }
@@ -167,18 +203,39 @@ function placeNodes(spec: DiagramSpec, previous: LayoutState | undefined, diagno
 function makeGroups(spec: DiagramSpec, nodes: Record<string, NodeGeometry>, previous?: LayoutState): Record<string, GroupGeometry> {
   return Object.fromEntries((spec.groups ?? []).map(group => {
     const members = groupMembers(spec, group.id).map(id => nodes[id]!).filter(Boolean), titleSize = group.style?.fontSize ?? 25;
-    const memberBounds = members.length ? union(members) : { x: 80, y: 160, width: 180, height: 90 };
-    const font = group.style?.font ?? 'heading';
+    const memberBounds = members.length ? union(members.map(nodeFootprint)) : { x: 80, y: 160, width: 180, height: 90 };
+    const font = group.style?.font ?? defaultFont(spec,true);
     const lines = wrapText(group.title, Math.max(180, memberBounds.width), titleSize, font), measured = textMeasure(lines, titleSize, font);
     const x = memberBounds.x - 28, y = memberBounds.y - measured.height - 40, width = Math.max(memberBounds.width + 56, measured.width + 56), height = memberBounds.height + measured.height + 68;
     const value: GroupGeometry = { id: group.id, x, y, width, height, seed: seed(`group:${group.id}`, previous?.groups[group.id]?.seed), titleLines: lines, titleBounds: { x: x + 24, y: y + 14, ...measured } };
     return [group.id, value];
   }));
 }
+function makeLanes(spec: DiagramSpec, nodes: Record<string,NodeGeometry>): {lanes: Record<string,LaneGeometry>; rows: Record<string,LaneGeometry>} {
+  const lanes: Record<string,LaneGeometry>={}, rows: Record<string,LaneGeometry>={};
+  if(spec.schemaVersion===1 || !spec.lanes?.length) return {lanes,rows};
+  const all=Object.values(nodes).map(nodeFootprint), bounds=union(all), font=defaultFont(spec,true);
+  const maxWidth=Math.max(180,...all.map(n=>n.width));
+  for(const [index,lane] of spec.lanes.entries()) {
+    const members=spec.nodes.filter(n=>n.lane===lane.id).map(n=>nodeFootprint(nodes[n.id]));
+    const local=members.length?union(members):{x:140+index*(maxWidth+(spec.layout?.gap??96)+64),y:bounds.y,width:maxWidth,height:bounds.height};
+    const width=Math.max(180,local.width+48),titleLines=wrapText(lane.label,width-24,24,font),titleSize=textMeasure(titleLines,24,font);
+    const captionLines=lane.caption?wrapText(lane.caption,width-24,20,defaultFont(spec)):undefined,captionSize=captionLines?textMeasure(captionLines,20,defaultFont(spec)):undefined;
+    const y=bounds.y-titleSize.height-(captionSize?.height??0)-40;
+    const value:LaneGeometry={id:lane.id,x:local.x-24,y,width,height:bottom(bounds)-y+28,titleBounds:{x:local.x-12,y:y+12,...titleSize},titleLines};
+    if(captionSize)value.captionBounds={x:local.x-12,y:bottom(value.titleBounds)+8,...captionSize};value.captionLines=captionLines;lanes[lane.id]=value;
+  }
+  for(const row of spec.rows??[]) {
+    const members=spec.nodes.filter(n=>n.row===row.id).map(n=>nodeFootprint(nodes[n.id]));if(!members.length)continue;
+    const local=union(members),titleLines=wrapText(row.label,110,22,font),size=textMeasure(titleLines,22,font);
+    rows[row.id]={id:row.id,x:bounds.x-140,y:local.y,width:120,height:local.height,titleBounds:{x:bounds.x-140,y:local.y+(local.height-size.height)/2,...size},titleLines};
+  }
+  return {lanes,rows};
+}
 function routeEdge(spec: DiagramSpec, edge: EdgeSpec, nodes: Record<string, NodeGeometry>, index: number, parallelCount: number, previous?: EdgeGeometry, annotations: Bounds[] = []): EdgeGeometry {
   const source = nodes[edge.source]!, target = nodes[edge.target]!, a = center(source), b = center(target);
   const sourceSpec = spec.nodes.find(node => node.id === edge.source)!, targetSpec = spec.nodes.find(node => node.id === edge.target)!;
-  const obstacles: Bounds[] = [...Object.values(nodes).filter(node => node.id !== edge.source && node.id !== edge.target), ...annotations];
+  const obstacles: Bounds[] = [...Object.values(nodes).filter(node => node.id !== edge.source && node.id !== edge.target).map(nodeFootprint), ...annotations];
   let path = '', points: Point[] = [];
   const offset = (index - (parallelCount - 1) / 2) * 68 * (edge.source <= edge.target ? 1 : -1);
   const n = (p: Point) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
@@ -225,7 +282,7 @@ function routeEdge(spec: DiagramSpec, edge: EdgeSpec, nodes: Record<string, Node
   };
   if ((edge.direction ?? 'forward') !== 'none') arrowAt(points[points.length - 1]!, points[points.length - 3] ?? points[0]!);
   if (edge.direction === 'both') arrowAt(points[0]!, points[2] ?? points[points.length - 1]!);
-  return { id: edge.id, path, points, seed: seed(`edge:${edge.id}`, previous?.seed), arrowheads: arrowPolygons.map(p => pathBounds(p, 2)), arrowPolygons, fontSize: edge.style?.fontSize ?? EDGE_SIZE, font: edge.style?.font ?? 'body' };
+  return { id: edge.id, path, points, seed: seed(`edge:${edge.id}`, previous?.seed), arrowheads: arrowPolygons.map(p => pathBounds(p, 2)), arrowPolygons, fontSize: edge.style?.fontSize ?? EDGE_SIZE, font: edge.style?.font ?? defaultFont(spec) };
 }
 function placeEdgeLabels(spec: DiagramSpec, edges: Record<string, EdgeGeometry>, nodes: Record<string, NodeGeometry>, groups: Record<string, GroupGeometry>, annotations: Bounds[] = []): void {
   const labels: Bounds[] = [], nodeBounds = Object.values(nodes), titleBounds = [...Object.values(groups).map(group => group.titleBounds), ...annotations];
@@ -251,7 +308,7 @@ function makeNotes(spec: DiagramSpec, nodes: Record<string, NodeGeometry>, group
   const notes: Record<string, NoteGeometry> = {}, obstacleBounds: Bounds[] = [...Object.values(nodes), ...Object.values(groups).map(g => g.titleBounds), ...Object.values(edges).map(e => e.labelBounds).filter((b): b is Bounds => !!b)];
   const drawing = union([...Object.values(nodes), ...Object.values(groups)]);
   for (const note of spec.notes ?? []) {
-    const size = note.style?.fontSize ?? 22, font = note.style?.font ?? 'body', lines = wrapText(note.text, 260, size, font), measured = textMeasure(lines, size, font), width = measured.width + 28, height = measured.height + 28;
+    const size = note.style?.fontSize ?? 22, font = note.style?.font ?? defaultFont(spec), lines = wrapText(note.text, 260, size, font), measured = textMeasure(lines, size, font), width = measured.width + 28, height = measured.height + 28;
     const attachment = note.attachTo ? nodes[note.attachTo] ?? groups[note.attachTo] : undefined;
     const old = previous?.notes[note.id];
     let x = note.position?.x ?? old?.x ?? (attachment ? right(attachment) + 36 : drawing.x), y = note.position?.y ?? old?.y ?? (attachment ? attachment.y : bottom(drawing) + 60);
@@ -267,36 +324,39 @@ function checkGeometry(spec: DiagramSpec, layout: LayoutState, diagnostics: Diag
   const standaloneText = [
     ...groups.map(group => ({ id: group.id, bounds: group.titleBounds })),
     ...notes.map(note => ({ id: note.id, bounds: note })),
+    ...nodes.flatMap(node=>[...(node.labelPosition && node.labelPosition !== 'inside' ? [{id:node.id,bounds:node.textBounds}]:[]),...(node.captionBounds?[{id:node.id,bounds:node.captionBounds}]:[])]),
+    ...[...Object.values(layout.lanes??{}),...Object.values(layout.rows??{})].flatMap(lane=>[{id:lane.id,bounds:lane.titleBounds},...(lane.captionBounds?[{id:lane.id,bounds:lane.captionBounds}]:[])]),
     ...(layout.titleBounds ? [{ id: 'diagram-title', bounds: layout.titleBounds }] : []),
     ...(layout.subtitleBounds ? [{ id: 'diagram-subtitle', bounds: layout.subtitleBounds }] : []),
     ...(layout.legendBounds ? [{ id: 'diagram-legend', bounds: layout.legendBounds }] : []),
   ];
-  const checkGlyphs = (id: string, text: string, font: 'body' | 'heading', bounds: Bounds) => {
-    const loaded = getFonts()[font], missing = [...new Set(Array.from(text).filter(character => !/\s/u.test(character) && !loaded.hasGlyphForCodePoint(character.codePointAt(0)!)))];
+  const checkGlyphs = (id: string, text: string, font: FontName, bounds: Bounds) => {
+    const loaded = getFont(font), missing = [...new Set(Array.from(text).filter(character => !/\s/u.test(character) && !loaded.hasGlyphForCodePoint(character.codePointAt(0)!)))];
     if (missing.length) diagnostics.push(diagnostic('error', 'unsupported_glyph', [id], bounds, `The bundled ${font} font has no glyph for ${JSON.stringify(missing.slice(0, 8).join(''))}. The complete text remains in the SVG; publication requires font coverage.`, ['font_coverage', 'use_supported_font']));
   };
-  checkGlyphs('diagram-title', spec.title, 'heading', layout.titleBounds!);
-  if (spec.subtitle) checkGlyphs('diagram-subtitle', spec.subtitle, 'body', layout.subtitleBounds!);
-  if (spec.legend) checkGlyphs('diagram-legend', spec.legend, 'body', layout.legendBounds!);
-  for (const group of spec.groups ?? []) checkGlyphs(group.id, group.title, group.style?.font ?? 'heading', layout.groups[group.id]!.titleBounds);
-  for (const note of spec.notes ?? []) checkGlyphs(note.id, note.text, note.style?.font ?? 'body', layout.notes[note.id]!.textBounds);
-  for (const edge of spec.edges ?? []) if (edge.label) checkGlyphs(edge.id, edge.label, edge.style?.font ?? 'body', layout.edges[edge.id]!.labelBounds!);
+  checkGlyphs('diagram-title', spec.title, defaultFont(spec,true), layout.titleBounds!);
+  if (spec.subtitle) checkGlyphs('diagram-subtitle', spec.subtitle, defaultFont(spec), layout.subtitleBounds!);
+  if (spec.legend) checkGlyphs('diagram-legend', spec.legend, defaultFont(spec), layout.legendBounds!);
+  for (const group of spec.groups ?? []) checkGlyphs(group.id, group.title, group.style?.font ?? defaultFont(spec,true), layout.groups[group.id]!.titleBounds);
+  for (const note of spec.notes ?? []) checkGlyphs(note.id, note.text, note.style?.font ?? defaultFont(spec), layout.notes[note.id]!.textBounds);
+  for (const edge of spec.edges ?? []) if (edge.label) checkGlyphs(edge.id, edge.label, edge.style?.font ?? defaultFont(spec), layout.edges[edge.id]!.labelBounds!);
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]!;
     for (let j = i + 1; j < nodes.length; j++) if (overlaps(node, nodes[j]!, 4)) {
       const bothPinned = pins.has(node.id) && pins.has(nodes[j]!.id);
       diagnostics.push(diagnostic('error', bothPinned ? 'pinned_overlap' : 'node_overlap', [node.id, nodes[j]!.id], union([node, nodes[j]!]), bothPinned ? 'Pinned nodes overlap. Change a pin or increase separation; the renderer kept both pinned coordinates.' : 'Node shapes overlap.', bothPinned ? ['change_constraints'] : ['local_spacing']));
     }
-    if (node.textBounds.x < node.x + 6 || node.textBounds.y < node.y + 6 || right(node.textBounds) > right(node) - 6 || bottom(node.textBounds) > bottom(node) - 6) diagnostics.push(diagnostic('error', 'text_outside_shape', [node.id], union([node, node.textBounds]), 'The measured label exceeds the allocated node dimensions.', ['resize_node', 'increase_label_width']));
+    if ((!node.labelPosition || node.labelPosition === 'inside') && (node.textBounds.x < node.x + 6 || node.textBounds.y < node.y + 6 || right(node.textBounds) > right(node) - 6 || bottom(node.textBounds) > bottom(node) - 6)) diagnostics.push(diagnostic('error', 'text_outside_shape', [node.id], union([node, node.textBounds]), 'The measured label exceeds the allocated node dimensions.', ['resize_node', 'increase_label_width']));
     if (node.fontSize < 16) diagnostics.push(diagnostic('warning', 'small_text', [node.id], node.textBounds, 'Text is smaller than 16 px at 1x viewing scale.', ['increase_font_size']));
     const nodeSpec = spec.nodes.find(item => item.id === node.id)!;
     checkGlyphs(node.id, nodeSpec.label, node.font, node.textBounds);
-    if (nodeSpec.label.split(/\s+/).some(word => measureText(word, node.fontSize, node.font) > (nodeSpec.width ?? 280) - PADDING * 2)) diagnostics.push(diagnostic(nodeSpec.width ? 'error' : 'warning', 'unbreakable_label', [node.id], node.textBounds, 'A word exceeds the requested wrapping width. The renderer retained the complete word.', ['increase_label_width', 'supply_explicit_line_break']));
-    for (const text of standaloneText) if (overlaps(node, text.bounds, 4)) diagnostics.push(diagnostic('error', 'annotation_node_collision', [node.id, text.id], union([node, text.bounds]), 'A node overlaps a note, diagram title, or group title.', ['move_annotation', 'local_spacing']));
+    if(nodeSpec.caption)checkGlyphs(node.id,nodeSpec.caption,node.font,node.captionBounds!);
+    if (nodeSpec.label.split(/\s+/).some(word => measureText(word, node.fontSize, node.font) > (nodeSpec.labelPosition && nodeSpec.labelPosition !== 'inside' ? Math.max(nodeSpec.width??0,280) : nodeSpec.width ?? 280) - PADDING * 2)) diagnostics.push(diagnostic(nodeSpec.width ? 'error' : 'warning', 'unbreakable_label', [node.id], node.textBounds, 'A word exceeds the requested wrapping width. The renderer retained the complete word.', ['increase_label_width', 'supply_explicit_line_break']));
+    for (const text of standaloneText) if (node.id !== text.id && overlaps(node, text.bounds, 4)) diagnostics.push(diagnostic('error', 'annotation_node_collision', [node.id, text.id], union([node, text.bounds]), 'A node overlaps a note, diagram title, or group title.', ['move_annotation', 'local_spacing']));
   }
   for (let i = 0; i < standaloneText.length; i++) for (let j = i + 1; j < standaloneText.length; j++) {
     const a = standaloneText[i]!, b = standaloneText[j]!;
-    if (overlaps(a.bounds, b.bounds, 4)) diagnostics.push(diagnostic('error', 'annotation_collision', [a.id, b.id], union([a.bounds, b.bounds]), 'Notes or titles overlap.', ['move_annotation', 'increase_group_padding']));
+    if (a.id !== b.id && overlaps(a.bounds, b.bounds, 4)) diagnostics.push(diagnostic('error', 'annotation_collision', [a.id, b.id], union([a.bounds, b.bounds]), 'Notes or titles overlap.', ['move_annotation', 'increase_group_padding']));
   }
   for (const edgeSpec of spec.edges ?? []) {
     const edge = layout.edges[edgeSpec.id]!;
@@ -331,18 +391,24 @@ function checkGeometry(spec: DiagramSpec, layout: LayoutState, diagnostics: Diag
     const valid = constraint.direction === 'right' ? node.x >= right(other) + gap - 0.5 : constraint.direction === 'left' ? right(node) <= other.x - gap + 0.5 : constraint.direction === 'below' ? node.y >= bottom(other) + gap - 0.5 : bottom(node) <= other.y - gap + 0.5;
     if (!valid) diagnostics.push(diagnostic('error', 'relative_constraint_conflict', [node.id, other.id], union([node, other]), 'Collision repair could not satisfy this relative placement constraint.', ['change_constraints', 'increase_spacing']));
   }
-  const allBounds = [...nodes, ...nodes.map(n => n.textBounds), ...groups, ...notes, ...edges.map(e => pathBounds(e.points, 4)), ...edges.flatMap(e => e.arrowheads), ...labelBoxes.map(item => item.bounds), ...standaloneText.map(item => item.bounds)];
+  for(const lane of Object.values(layout.lanes??{})) {
+    for(const other of Object.values(layout.lanes??{})) if(lane.id<other.id && overlaps(lane,other,4))diagnostics.push(diagnostic('error','lane_overlap',[lane.id,other.id],union([lane,other]),'Lane boundaries overlap.',['local_spacing']));
+    const definition=spec.lanes?.find(l=>l.id===lane.id);if(definition){checkGlyphs(lane.id,definition.label,defaultFont(spec,true),lane.titleBounds);if(definition.caption)checkGlyphs(lane.id,definition.caption,defaultFont(spec),lane.captionBounds!);}
+    for(const nodeSpec of spec.nodes.filter(n=>n.lane===lane.id)){const member=nodeFootprint(layout.nodes[nodeSpec.id]);if(member.x<lane.x || right(member)>right(lane) || member.y<bottom(lane.captionBounds??lane.titleBounds)+8 || bottom(member)>bottom(lane))diagnostics.push(diagnostic('error','outside_lane',[lane.id,nodeSpec.id],union([lane,member]),'Node does not fit its lane.',['local_spacing']));}
+  }
+  for(const definition of spec.rows??[]){const row=layout.rows?.[definition.id];if(row)checkGlyphs(row.id,definition.label,defaultFont(spec,true),row.titleBounds);}
+  const allBounds = [...Object.values(layout.lanes??{}),...Object.values(layout.rows??{}),...nodes, ...nodes.map(n => n.textBounds), ...groups, ...notes, ...edges.map(e => pathBounds(e.points, 4)), ...edges.flatMap(e => e.arrowheads), ...labelBoxes.map(item => item.bounds), ...standaloneText.map(item => item.bounds)];
   for (const bounds of allBounds) if (bounds.x < layout.viewport.x || bounds.y < layout.viewport.y || right(bounds) > right(layout.viewport) || bottom(bounds) > bottom(layout.viewport)) diagnostics.push(diagnostic('error', 'content_outside_viewport', [], bounds, 'Content exceeds the exported document bounds.', ['expand_viewport']));
   if (spec.nodes.length > 30 && (spec.edges?.length ?? 0) > spec.nodes.length * 2) diagnostics.push(diagnostic('warning', 'dense_graph', [spec.id], layout.viewport, 'This dense graph may need alternate views for readable relationship ownership.', ['alternate_view', 'increase_spacing']));
 }
-function escape(text: string): string { return text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]!); }
+export function escape(text: string): string { return text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]!); }
 function round(value: number): string { return value.toFixed(2); }
 function attrs(box: Bounds): string { return `x="${round(box.x)}" y="${round(box.y)}" width="${round(box.width)}" height="${round(box.height)}"`; }
-function renderText(lines: string[], bounds: Bounds, fontSize: number, font: 'body' | 'heading', color: string, align: 'left' | 'center' = 'left'): string {
-  const loaded = getFonts()[font], ascent = loaded.ascent / loaded.unitsPerEm * fontSize;
+export function renderText(lines: string[], bounds: Bounds, fontSize: number, font: FontName, color: string, align: 'left' | 'center' = 'left'): string {
+  const loaded = getFont(font), ascent = loaded.ascent / loaded.unitsPerEm * fontSize;
   const y = bounds.y + (lineHeight(fontSize) - (loaded.ascent - loaded.descent) / loaded.unitsPerEm * fontSize) / 2 + ascent;
   const x = align === 'center' ? bounds.x + bounds.width / 2 : bounds.x;
-  return `<text font-family="${font === 'body' ? 'SketchBody' : 'SketchHeading'}" font-size="${fontSize}" fill="${escape(color)}" text-anchor="${align === 'center' ? 'middle' : 'start'}">${lines.map((line, i) => `<tspan x="${round(x)}" y="${round(y + i * lineHeight(fontSize))}">${escape(line)}</tspan>`).join('')}</text>`;
+  return `<text font-family="${font === 'sans' ? 'DiagramSans' : font === 'body' ? 'SketchBody' : 'SketchHeading'}" font-size="${fontSize}" fill="${escape(color)}" text-anchor="${align === 'center' ? 'middle' : 'start'}">${lines.map((line, i) => `<tspan x="${round(x)}" y="${round(y + i * lineHeight(fontSize))}">${escape(line)}</tspan>`).join('')}</text>`;
 }
 function sketch(drawable: ReturnType<typeof generator.rectangle>, dashed = false): string {
   return generator.toPaths(drawable).map(path => `<path d="${path.d}" stroke="${path.stroke}" stroke-width="${path.strokeWidth}" fill="${path.fill || 'none'}"${dashed ? ' stroke-dasharray="8 6"' : ''} stroke-linecap="round" stroke-linejoin="round"/>`).join('');
@@ -353,13 +419,15 @@ function roundedPath(b: Bounds): string {
 }
 function renderSvg(spec: DiagramSpec, layout: LayoutState, diagnostics: Diagnostic[], debug = false): string {
   const loaded = getFonts(), viewport = layout.viewport, transparent = spec.theme?.background === 'transparent' || spec.theme?.background === 'none', background = spec.theme?.background ?? '#ffffff';
-  const pieces: string[] = [`<svg xmlns="http://www.w3.org/2000/svg" width="${round(viewport.width)}" height="${round(viewport.height)}" viewBox="${round(viewport.x)} ${round(viewport.y)} ${round(viewport.width)} ${round(viewport.height)}" role="img" aria-labelledby="svg-title" data-diagram-id="${escape(spec.id)}" data-spec-hash="${layout.specHash}"><title id="svg-title">${escape(spec.title)}</title><defs><style>@font-face{font-family:SketchBody;src:url(data:font/ttf;base64,${loaded.bodyData}) format('truetype');font-weight:400;font-style:normal}@font-face{font-family:SketchHeading;src:url(data:font/ttf;base64,${loaded.headingData}) format('truetype');font-weight:400;font-style:normal}text{font-kerning:normal}</style></defs>`];
+  const pieces: string[] = [`<svg xmlns="http://www.w3.org/2000/svg" width="${round(viewport.width)}" height="${round(viewport.height)}" viewBox="${round(viewport.x)} ${round(viewport.y)} ${round(viewport.width)} ${round(viewport.height)}" role="img" aria-labelledby="svg-title" data-diagram-id="${escape(spec.id)}" data-spec-hash="${layout.specHash}"><title id="svg-title">${escape(spec.title)}</title><defs><style>${fontCss(spec.schemaVersion === 2)}</style></defs>`];
   pieces.push(`<rect id="diagram-background" ${attrs(viewport)} fill="${transparent ? 'none' : escape(background)}"/>`);
+  for(const lane of Object.values(layout.lanes??{})){pieces.push(`<g data-lane-id="${escape(lane.id)}"><rect ${attrs(lane)} rx="18" fill="none" stroke="${escape(spec.theme?.stroke??'#28303a')}" stroke-width="1.5"/>${renderText(lane.titleLines,lane.titleBounds,24,defaultFont(spec,true),spec.theme?.stroke??'#28303a')}${lane.captionBounds?renderText(lane.captionLines!,lane.captionBounds,20,defaultFont(spec),spec.theme?.stroke??'#28303a'):''}</g>`);}
+  for(const row of Object.values(layout.rows??{})) pieces.push(renderText(row.titleLines,row.titleBounds,22,defaultFont(spec,true),spec.theme?.stroke??'#28303a'));
   for (const groupSpec of spec.groups ?? []) {
     const group = layout.groups[groupSpec.id]!, style = styleFor(spec, groupSpec.style), border = groupSpec.boundary ?? 'dashed';
     pieces.push(`<g id="group-${escape(group.id)}" data-element-id="${escape(group.id)}"${style.emphasis === 'muted' ? ' opacity="0.68"' : ''}>`);
     pieces.push(sketch(generator.rectangle(group.x, group.y, group.width, group.height, { seed: group.seed, roughness: style.roughness, stroke: border === 'none' ? 'none' : style.stroke, strokeWidth: style.strokeWidth, fill: groupSpec.fill ?? groupSpec.style?.fill ?? 'none', fillStyle: 'solid' }), border === 'dashed'));
-    pieces.push(renderText(group.titleLines, group.titleBounds, groupSpec.style?.fontSize ?? 25, groupSpec.style?.font ?? 'heading', style.stroke)); pieces.push('</g>');
+    pieces.push(renderText(group.titleLines, group.titleBounds, groupSpec.style?.fontSize ?? 25, groupSpec.style?.font ?? defaultFont(spec,true), style.stroke)); pieces.push('</g>');
   }
   for (const edgeSpec of spec.edges ?? []) {
     const edge = layout.edges[edgeSpec.id]!, style = styleFor(spec, edgeSpec.style);
@@ -371,10 +439,12 @@ function renderSvg(spec: DiagramSpec, layout: LayoutState, diagnostics: Diagnost
   for (const nodeSpec of spec.nodes) {
     const node = layout.nodes[nodeSpec.id]!, style = styleFor(spec, nodeSpec.style), options = { seed: node.seed, stroke: style.stroke, strokeWidth: style.strokeWidth, roughness: style.roughness, fill: style.fill, fillStyle: 'solid' as const };
     pieces.push(`<g id="node-${escape(node.id)}" data-element-id="${escape(node.id)}"${style.emphasis === 'muted' ? ' opacity="0.68"' : ''}>`);
-    if (nodeSpec.shape === 'ellipse') pieces.push(sketch(generator.ellipse(node.x + node.width / 2, node.y + node.height / 2, node.width, node.height, options)));
+    if (nodeSpec.shape === 'ellipse' || nodeSpec.shape === 'circle') pieces.push(sketch(generator.ellipse(node.x + node.width / 2, node.y + node.height / 2, node.width, node.height, options)));
     else if (nodeSpec.shape === 'rectangle') pieces.push(sketch(generator.rectangle(node.x, node.y, node.width, node.height, options)));
     else if (nodeSpec.shape !== 'text') pieces.push(sketch(generator.path(roundedPath(node), options)));
-    pieces.push(renderText(node.lines, node.textBounds, node.fontSize, node.font, style.stroke, 'center')); pieces.push('</g>');
+    if(nodeSpec.style?.highlight ?? spec.theme?.highlight) pieces.push(`<rect ${attrs(node.textBounds)} fill="${escape((nodeSpec.style?.highlight ?? spec.theme?.highlight)!)}"/>`);
+    pieces.push(renderText(node.lines, node.textBounds, node.fontSize, node.font, style.stroke, 'center'));
+    if(node.captionBounds) pieces.push(renderText(node.captionLines!,node.captionBounds,20,node.font,style.stroke,'center')); pieces.push('</g>');
   }
   for (const edgeSpec of spec.edges ?? []) {
     const edge = layout.edges[edgeSpec.id]!;
@@ -389,12 +459,12 @@ function renderSvg(spec: DiagramSpec, layout: LayoutState, diagnostics: Diagnost
     pieces.push(`<g id="note-${escape(note.id)}" data-element-id="${escape(note.id)}"${style.emphasis === 'muted' ? ' opacity="0.68"' : ''}>`);
     const attached = noteSpec.attachTo ? layout.nodes[noteSpec.attachTo] ?? layout.groups[noteSpec.attachTo] : undefined;
     if (attached) { const a = boundary(attached, center(note)), b = boundary(note, center(attached)); pieces.push(`<path d="M ${a.x} ${a.y} L ${b.x} ${b.y}" fill="none" stroke="${escape(style.stroke)}" stroke-width="1" stroke-dasharray="3 6"/>`); }
-    pieces.push(sketch(generator.rectangle(note.x, note.y, note.width, note.height, { seed: note.seed, stroke: style.stroke, strokeWidth: 1, roughness: style.roughness, fill: noteSpec.style?.fill ?? '#fff6cc', fillStyle: 'solid' })));
+    pieces.push(sketch(generator.rectangle(note.x, note.y, note.width, note.height, { seed: note.seed, stroke: style.stroke, strokeWidth: 1, roughness: style.roughness, fill: noteSpec.style?.fill ?? (noteSpec.style?.presentation==='plain' ? 'none' : '#fff6cc'), fillStyle: 'solid' })));
     pieces.push(renderText(note.lines, note.textBounds, note.fontSize, note.font ?? 'body', style.stroke)); pieces.push('</g>');
   }
-  if (layout.titleBounds) pieces.push(renderText(wrapText(spec.title, 900, TITLE_SIZE, 'heading'), layout.titleBounds, TITLE_SIZE, 'heading', spec.theme?.stroke ?? '#28303a'));
-  if (layout.subtitleBounds) pieces.push(renderText(wrapText(spec.subtitle!, 900, 22), layout.subtitleBounds, 22, 'body', spec.theme?.stroke ?? '#28303a'));
-  if (layout.legendBounds) pieces.push(renderText(wrapText(spec.legend!, 900, 20), layout.legendBounds, 20, 'body', spec.theme?.stroke ?? '#28303a'));
+  if (layout.titleBounds) pieces.push(renderText(wrapText(spec.title, 900, TITLE_SIZE, defaultFont(spec,true)), layout.titleBounds, TITLE_SIZE, defaultFont(spec,true), spec.theme?.stroke ?? '#28303a'));
+  if (layout.subtitleBounds) pieces.push(renderText(wrapText(spec.subtitle!, 900, 22,defaultFont(spec)), layout.subtitleBounds, 22, defaultFont(spec), spec.theme?.stroke ?? '#28303a'));
+  if (layout.legendBounds) pieces.push(renderText(wrapText(spec.legend!, 900, 20,defaultFont(spec)), layout.legendBounds, 20, defaultFont(spec), spec.theme?.stroke ?? '#28303a'));
   if (debug) {
     pieces.push('<g id="diagnostics-overlay" font-family="monospace" font-size="12" pointer-events="none">');
     for (const element of [...Object.values(layout.nodes), ...Object.values(layout.groups), ...Object.values(layout.notes)]) pieces.push(`<rect ${attrs(element)} fill="none" stroke="#1675c0" stroke-width="1" stroke-dasharray="3 3"/><text x="${element.x}" y="${element.y - 4}" fill="#1675c0">${escape(element.id)}</text>`);
@@ -406,25 +476,27 @@ function renderSvg(spec: DiagramSpec, layout: LayoutState, diagnostics: Diagnost
 }
 export function renderDiagram(spec: DiagramSpec, previousLayout?: LayoutState): RenderResult {
   getFonts();
+  if(previousLayout)previousLayout={...previousLayout,nodes:Object.assign(Object.create(null),previousLayout.nodes),edges:Object.assign(Object.create(null),previousLayout.edges),groups:Object.assign(Object.create(null),previousLayout.groups),notes:Object.assign(Object.create(null),previousLayout.notes)};
   const diagnostics: Diagnostic[] = [];
-  const titleLines = wrapText(spec.title, 900, TITLE_SIZE, 'heading'), titleBounds = { x: 80, y: 28, ...textMeasure(titleLines, TITLE_SIZE, 'heading') };
-  const subtitleBounds = spec.subtitle ? { x: 80, y: bottom(titleBounds) + 5, ...textMeasure(wrapText(spec.subtitle, 900, 22), 22) } : undefined;
+  const titleLines = wrapText(spec.title, 900, TITLE_SIZE, defaultFont(spec,true)), titleBounds = { x: 80, y: 28, ...textMeasure(titleLines, TITLE_SIZE, defaultFont(spec,true)) };
+  const subtitleBounds = spec.subtitle ? { x: 80, y: bottom(titleBounds) + 5, ...textMeasure(wrapText(spec.subtitle, 900, 22,defaultFont(spec)), 22,defaultFont(spec)) } : undefined;
   const startY = bottom(subtitleBounds ?? titleBounds) + 30;
   const nodes = placeNodes(spec, previousLayout, diagnostics, startY), groups = makeGroups(spec, nodes, previousLayout), edges: Record<string, EdgeGeometry> = {};
   const pairEdges = new Map<string, EdgeSpec[]>();
   for (const edge of spec.edges ?? []) { const key = [edge.source, edge.target].sort().join('|'); pairEdges.set(key, [...(pairEdges.get(key) ?? []), edge]); }
-  const headerBounds = [titleBounds, ...(subtitleBounds ? [subtitleBounds] : [])];
+  const {lanes,rows}=makeLanes(spec,nodes);
+  const headerBounds = [titleBounds, ...(subtitleBounds ? [subtitleBounds] : []),...Object.values(nodes).flatMap(n=>[...(n.labelPosition && n.labelPosition !== 'inside'?[n.textBounds]:[]),...n.captionBounds?[n.captionBounds]:[]]),...[...Object.values(lanes),...Object.values(rows)].flatMap(l=>[l.titleBounds,...l.captionBounds?[l.captionBounds]:[]])];
   for (const edge of spec.edges ?? []) { const parallel = pairEdges.get([edge.source, edge.target].sort().join('|'))!; edges[edge.id] = routeEdge(spec, edge, nodes, parallel.indexOf(edge), parallel.length, previousLayout?.edges[edge.id], [...headerBounds, ...Object.values(groups).map(group => group.titleBounds)]); }
   placeEdgeLabels(spec, edges, nodes, groups, headerBounds);
-  const notes = makeNotes(spec, nodes, groups, edges, previousLayout), contentBounds: Bounds[] = [titleBounds, ...Object.values(nodes), ...Object.values(nodes).map(node => node.textBounds), ...Object.values(groups), ...Object.values(notes), ...Object.values(edges).map(edge => pathBounds(edge.points, 5)), ...Object.values(edges).flatMap(edge => [...edge.arrowheads, ...(edge.labelBounds ? [edge.labelBounds] : [])])];
+  const notes = makeNotes(spec, nodes, groups, edges, previousLayout), contentBounds: Bounds[] = [titleBounds, ...Object.values(lanes),...Object.values(rows), ...Object.values(nodes), ...Object.values(nodes).map(node => node.textBounds), ...Object.values(nodes).flatMap(node=>node.captionBounds?[node.captionBounds]:[]), ...Object.values(groups), ...Object.values(notes), ...Object.values(edges).map(edge => pathBounds(edge.points, 5)), ...Object.values(edges).flatMap(edge => [...edge.arrowheads, ...(edge.labelBounds ? [edge.labelBounds] : [])])];
   if (subtitleBounds) contentBounds.push(subtitleBounds);
-  const drawing = union(contentBounds), legendBounds = spec.legend ? { x: drawing.x, y: bottom(drawing) + 32, ...textMeasure(wrapText(spec.legend, 900, 20), 20) } : undefined;
+  const drawing = union(contentBounds), legendBounds = spec.legend ? { x: drawing.x, y: bottom(drawing) + 32, ...textMeasure(wrapText(spec.legend, 900, 20,defaultFont(spec)), 20,defaultFont(spec)) } : undefined;
   if (legendBounds) contentBounds.push(legendBounds);
   const viewport = expand(union(contentBounds), 28);
-  const layout: LayoutState = { specHash: hashSpec(spec), engineVersion: ENGINE_VERSION, fontVersion: FONT_VERSION, nodes, groups, edges, notes, viewport, titleBounds, ...(subtitleBounds ? { subtitleBounds } : {}), ...(legendBounds ? { legendBounds } : {}) };
+  const layout: LayoutState = { specHash: hashSpec(spec), engineVersion: spec.schemaVersion===2?'2.0.0':ENGINE_VERSION, fontVersion: spec.schemaVersion===2?'bundled-sketch-noto-1':FONT_VERSION, nodes, groups, edges, notes, ...(spec.schemaVersion===2?{lanes,rows}:{}), viewport, titleBounds, ...(subtitleBounds ? { subtitleBounds } : {}), ...(legendBounds ? { legendBounds } : {}) };
   // Bounds aliases keep exported geometry convenient for capture and external consumers.
   Object.assign(layout, { bounds: viewport });
-  for (const element of [...Object.values(nodes), ...Object.values(groups), ...Object.values(notes)]) Object.assign(element, { bounds: { x: element.x, y: element.y, width: element.width, height: element.height } });
+  for (const element of [...Object.values(nodes), ...Object.values(groups), ...Object.values(notes)]) Object.assign(element, { bounds: spec.schemaVersion===2 && 'textBounds' in element ? union([{x:element.x,y:element.y,width:element.width,height:element.height}, element.textBounds,...('captionBounds' in element && element.captionBounds?[element.captionBounds as Bounds]:[])]) : { x: element.x, y: element.y, width: element.width, height: element.height } });
   for (const edge of Object.values(edges)) Object.assign(edge, { bounds: union([pathBounds(edge.points, 5), ...edge.arrowheads, ...(edge.labelBounds ? [edge.labelBounds] : [])]) });
   checkGeometry(spec, layout, diagnostics);
   return { svg: renderSvg(spec, layout, diagnostics), debugSvg: renderSvg(spec, layout, diagnostics, true), layout, diagnostics };
