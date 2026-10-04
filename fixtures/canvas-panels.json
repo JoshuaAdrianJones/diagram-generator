@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "kind": "canvas",
+  "id": "scenario-panels",
+  "title": "Scenario Panels",
+  "frames": [
+    {
+      "id": "intro",
+      "kind": "panel",
+      "title": "Gather",
+      "blocks": [
+        {
+          "kind": "quote",
+          "text": "A generic collection is ready for review."
+        },
+        {
+          "kind": "heading",
+          "text": "Inputs"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "A small sample",
+            "A recorded question"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "kind": "panel",
+      "title": "Review",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Compare the observations. Keep the original wording and identify unresolved questions."
+        },
+        {
+          "kind": "heading",
+          "text": "Output",
+          "emphasis": "strong"
+        },
+        {
+          "kind": "paragraph",
+          "text": "A short review record.",
+          "style": {
+            "highlight": "#fff59b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "finish",
+      "kind": "panel",
+      "title": "Finish",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Save the result and its review."
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "id": "next",
+      "source": {
+        "frameId": "intro"
+      },
+      "target": {
+        "frameId": "review"
+      },
+      "label": "Next step"
+    }
+  ],
+  "theme": {
+    "preset": "clean"
+  }
+}

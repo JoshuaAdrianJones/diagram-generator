@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "kind": "canvas",
+  "id": "nested-regions",
+  "title": "Nested Regions",
+  "frames": [
+    {
+      "id": "inner-view",
+      "kind": "graph",
+      "graph": {
+        "schemaVersion": 2,
+        "kind": "graph",
+        "id": "small-sequence",
+        "title": "Small Sequence",
+        "model": "path",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Read",
+            "shape": "circle",
+            "width": 44,
+            "labelPosition": "above",
+            "position": {
+              "x": 120,
+              "y": 220
+            },
+            "style": {
+              "fontSize": 16
+            }
+          },
+          {
+            "id": "b",
+            "label": "Save",
+            "shape": "circle",
+            "width": 44,
+            "labelPosition": "above",
+            "position": {
+              "x": 280,
+              "y": 220
+            },
+            "style": {
+              "fontSize": 16
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "source": "a",
+            "target": "b"
+          }
+        ],
+        "layout": {
+          "strategy": "manual"
+        }
+      },
+      "position": {
+        "x": 800,
+        "y": 900
+      }
+    },
+    {
+      "id": "outer-view",
+      "kind": "graph",
+      "graph": {
+        "schemaVersion": 2,
+        "kind": "graph",
+        "id": "small-sequence",
+        "title": "Small Sequence",
+        "model": "path",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Read",
+            "shape": "circle",
+            "width": 44,
+            "labelPosition": "above",
+            "position": {
+              "x": 120,
+              "y": 220
+            },
+            "style": {
+              "fontSize": 16
+            }
+          },
+          {
+            "id": "b",
+            "label": "Save",
+            "shape": "circle",
+            "width": 44,
+            "labelPosition": "above",
+            "position": {
+              "x": 280,
+              "y": 220
+            },
+            "style": {
+              "fontSize": 16
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "source": "a",
+            "target": "b"
+          }
+        ],
+        "layout": {
+          "strategy": "manual"
+        }
+      },
+      "position": {
+        "x": 1650,
+        "y": 1200
+      }
+    }
+  ],
+  "regions": [
+    {
+      "id": "outer",
+      "title": "Whole context",
+      "shape": "ellipse",
+      "position": {
+        "x": 32,
+        "y": 160
+      },
+      "width": 2400,
+      "height": 2400,
+      "members": [
+        "inner",
+        "outer-view"
+      ]
+    },
+    {
+      "id": "inner",
+      "title": "Local context",
+      "shape": "ellipse",
+      "position": {
+        "x": 600,
+        "y": 650
+      },
+      "width": 800,
+      "height": 800,
+      "members": [
+        "inner-view"
+      ]
+    }
+  ],
+  "layout": {
+    "strategy": "manual"
+  }
+}
