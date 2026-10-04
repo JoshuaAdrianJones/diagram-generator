@@ -1,0 +1,395 @@
+{
+  "schemaVersion": 1,
+  "id": "dense-20",
+  "title": "Twenty concept map",
+  "subtitle": "Synthetic performance fixture",
+  "nodes": [
+    {
+      "id": "n0",
+      "label": "Concept 1",
+      "position": {
+        "x": 80,
+        "y": 150
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n1",
+      "label": "Concept 2",
+      "position": {
+        "x": 380,
+        "y": 150
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n2",
+      "label": "Concept 3",
+      "position": {
+        "x": 680,
+        "y": 150
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n3",
+      "label": "Concept 4",
+      "position": {
+        "x": 980,
+        "y": 150
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n4",
+      "label": "Concept 5",
+      "position": {
+        "x": 1280,
+        "y": 150
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n5",
+      "label": "Concept 6",
+      "position": {
+        "x": 80,
+        "y": 350
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n6",
+      "label": "Concept 7",
+      "position": {
+        "x": 380,
+        "y": 350
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n7",
+      "label": "Concept 8",
+      "position": {
+        "x": 680,
+        "y": 350
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n8",
+      "label": "Concept 9",
+      "position": {
+        "x": 980,
+        "y": 350
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n9",
+      "label": "Concept 10",
+      "position": {
+        "x": 1280,
+        "y": 350
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n10",
+      "label": "Concept 11",
+      "position": {
+        "x": 80,
+        "y": 550
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n11",
+      "label": "Concept 12",
+      "position": {
+        "x": 380,
+        "y": 550
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n12",
+      "label": "Concept 13",
+      "position": {
+        "x": 680,
+        "y": 550
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n13",
+      "label": "Concept 14",
+      "position": {
+        "x": 980,
+        "y": 550
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n14",
+      "label": "Concept 15",
+      "position": {
+        "x": 1280,
+        "y": 550
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n15",
+      "label": "Concept 16",
+      "position": {
+        "x": 80,
+        "y": 750
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n16",
+      "label": "Concept 17",
+      "position": {
+        "x": 380,
+        "y": 750
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n17",
+      "label": "Concept 18",
+      "position": {
+        "x": 680,
+        "y": 750
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n18",
+      "label": "Concept 19",
+      "position": {
+        "x": 980,
+        "y": 750
+      },
+      "shape": "roundedRectangle"
+    },
+    {
+      "id": "n19",
+      "label": "Concept 20",
+      "position": {
+        "x": 1280,
+        "y": 750
+      },
+      "shape": "roundedRectangle"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "source": "n0",
+      "target": "n1",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e5",
+      "source": "n5",
+      "target": "n6",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e6",
+      "source": "n6",
+      "target": "n7",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e7",
+      "source": "n7",
+      "target": "n8",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e8",
+      "source": "n8",
+      "target": "n9",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e10",
+      "source": "n10",
+      "target": "n11",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e11",
+      "source": "n11",
+      "target": "n12",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e12",
+      "source": "n12",
+      "target": "n13",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e13",
+      "source": "n13",
+      "target": "n14",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e15",
+      "source": "n15",
+      "target": "n16",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e16",
+      "source": "n16",
+      "target": "n17",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e17",
+      "source": "n17",
+      "target": "n18",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "e18",
+      "source": "n18",
+      "target": "n19",
+      "direction": "forward",
+      "label": "relates"
+    },
+    {
+      "id": "v0",
+      "source": "n0",
+      "target": "n5",
+      "direction": "none"
+    },
+    {
+      "id": "v1",
+      "source": "n1",
+      "target": "n6",
+      "direction": "none"
+    },
+    {
+      "id": "v2",
+      "source": "n2",
+      "target": "n7",
+      "direction": "none"
+    },
+    {
+      "id": "v3",
+      "source": "n3",
+      "target": "n8",
+      "direction": "none"
+    },
+    {
+      "id": "v4",
+      "source": "n4",
+      "target": "n9",
+      "direction": "none"
+    },
+    {
+      "id": "v5",
+      "source": "n5",
+      "target": "n10",
+      "direction": "none"
+    },
+    {
+      "id": "v6",
+      "source": "n6",
+      "target": "n11",
+      "direction": "none"
+    },
+    {
+      "id": "v7",
+      "source": "n7",
+      "target": "n12",
+      "direction": "none"
+    },
+    {
+      "id": "v8",
+      "source": "n8",
+      "target": "n13",
+      "direction": "none"
+    },
+    {
+      "id": "v9",
+      "source": "n9",
+      "target": "n14",
+      "direction": "none"
+    },
+    {
+      "id": "v10",
+      "source": "n10",
+      "target": "n15",
+      "direction": "none"
+    },
+    {
+      "id": "v11",
+      "source": "n11",
+      "target": "n16",
+      "direction": "none"
+    },
+    {
+      "id": "v12",
+      "source": "n12",
+      "target": "n17",
+      "direction": "none"
+    },
+    {
+      "id": "v13",
+      "source": "n13",
+      "target": "n18",
+      "direction": "none"
+    },
+    {
+      "id": "v14",
+      "source": "n14",
+      "target": "n19",
+      "direction": "none"
+    }
+  ],
+  "layout": {
+    "strategy": "manual"
+  }
+}

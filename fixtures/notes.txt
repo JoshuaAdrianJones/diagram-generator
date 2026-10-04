@@ -1,0 +1,1 @@
+Synthetic fixture: A question guides which concepts we select. Concepts are connected by relationships. Relationships can be tested against evidence, but that last connection is a hypothesis. Concepts and relationships have an association, not a causal link.

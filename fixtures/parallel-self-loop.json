@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "parallel-self-loop",
+  "title": "Signals and responses",
+  "nodes": [
+    {
+      "id": "sender",
+      "label": "Sender",
+      "position": {
+        "x": 100,
+        "y": 170
+      }
+    },
+    {
+      "id": "receiver",
+      "label": "Receiver",
+      "shape": "ellipse",
+      "position": {
+        "x": 470,
+        "y": 170
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "signal",
+      "source": "sender",
+      "target": "receiver",
+      "direction": "forward",
+      "label": "signal",
+      "routing": "curve"
+    },
+    {
+      "id": "response",
+      "source": "receiver",
+      "target": "sender",
+      "direction": "forward",
+      "label": "response",
+      "routing": "curve"
+    },
+    {
+      "id": "shared",
+      "source": "sender",
+      "target": "receiver",
+      "direction": "both",
+      "label": "shared context",
+      "routing": "outside"
+    },
+    {
+      "id": "reflect",
+      "source": "receiver",
+      "target": "receiver",
+      "direction": "forward",
+      "label": "reflect"
+    }
+  ],
+  "layout": {
+    "strategy": "manual",
+    "gap": 100
+  }
+}

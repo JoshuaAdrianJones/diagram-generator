@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "cycle",
+  "title": "Learning loop",
+  "nodes": [
+    {
+      "id": "observe",
+      "label": "Observe"
+    },
+    {
+      "id": "interpret",
+      "label": "Interpret"
+    },
+    {
+      "id": "experiment",
+      "label": "Experiment"
+    }
+  ],
+  "edges": [
+    {
+      "id": "oi",
+      "source": "observe",
+      "target": "interpret",
+      "label": "make sense of",
+      "direction": "forward"
+    },
+    {
+      "id": "ie",
+      "source": "interpret",
+      "target": "experiment",
+      "label": "choose a test",
+      "direction": "forward"
+    },
+    {
+      "id": "eo",
+      "source": "experiment",
+      "target": "observe",
+      "label": "learn from results",
+      "direction": "forward",
+      "routing": "outside"
+    }
+  ],
+  "layout": {
+    "strategy": "cycle",
+    "gap": 100
+  }
+}

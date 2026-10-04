@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "id": "concept-map",
+  "title": "From question to evidence",
+  "subtitle": "Synthetic acceptance fixture",
+  "nodes": [
+    {
+      "id": "question",
+      "label": "Focus question",
+      "shape": "text"
+    },
+    {
+      "id": "concepts",
+      "label": "Concepts",
+      "shape": "roundedRectangle",
+      "style": {
+        "fill": "#e7f1ff"
+      }
+    },
+    {
+      "id": "relationships",
+      "label": "Relationships",
+      "shape": "ellipse",
+      "style": {
+        "fill": "#fff0d9"
+      }
+    },
+    {
+      "id": "evidence",
+      "label": "Evidence",
+      "shape": "rectangle",
+      "style": {
+        "fill": "#e7f3e8"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "extract",
+      "source": "question",
+      "target": "concepts",
+      "direction": "forward",
+      "label": "guides selection"
+    },
+    {
+      "id": "connect",
+      "source": "concepts",
+      "target": "relationships",
+      "direction": "none",
+      "label": "connected by"
+    },
+    {
+      "id": "test",
+      "source": "relationships",
+      "target": "evidence",
+      "direction": "forward",
+      "label": "tested against",
+      "certainty": "hypothesis"
+    }
+  ],
+  "layout": {
+    "strategy": "flow"
+  },
+  "provenance": {
+    "supplied": [
+      "question",
+      "concepts",
+      "relationships",
+      "evidence",
+      "extract",
+      "connect",
+      "test"
+    ],
+    "sourceSummary": "Synthetic example, not a user product model."
+  }
+}

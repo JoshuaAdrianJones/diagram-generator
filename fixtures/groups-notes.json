@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "groups-notes",
+  "title": "Working assumptions",
+  "nodes": [
+    {
+      "id": "input",
+      "label": "Local notes",
+      "shape": "text",
+      "position": {
+        "x": 80,
+        "y": 180
+      }
+    },
+    {
+      "id": "model",
+      "label": "Conceptual model",
+      "shape": "roundedRectangle",
+      "position": {
+        "x": 350,
+        "y": 180
+      }
+    },
+    {
+      "id": "check",
+      "label": "Check with evidence",
+      "shape": "ellipse",
+      "position": {
+        "x": 700,
+        "y": 180
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "construct",
+      "source": "input",
+      "target": "model",
+      "direction": "none",
+      "label": "describes"
+    },
+    {
+      "id": "verify",
+      "source": "model",
+      "target": "check",
+      "direction": "forward",
+      "label": "test hypothesis",
+      "certainty": "hypothesis"
+    }
+  ],
+  "groups": [
+    {
+      "id": "thinking",
+      "title": "Thinking",
+      "members": [
+        "input",
+        "model"
+      ],
+      "boundary": "dashed",
+      "fill": "#f0f6ff"
+    }
+  ],
+  "notes": [
+    {
+      "id": "caution",
+      "text": "Synthetic fixture. Associations do not imply causation.",
+      "attachTo": "model",
+      "position": {
+        "x": 350,
+        "y": 420
+      }
+    }
+  ],
+  "layout": {
+    "strategy": "manual"
+  }
+}

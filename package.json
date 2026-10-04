@@ -1,0 +1,31 @@
+{
+  "name": "sketch-diagram",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local sketch diagrams with reviewed revisions and a Codex skill",
+  "engines": { "node": ">=22.19.0 <27" },
+  "bin": { "sketch-diagram": "bin/sketch-diagram.mjs" },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "test:integration-install": "node scripts/test-integration.mjs",
+    "doctor": "node bin/sketch-diagram.mjs doctor --json",
+    "install:local": "node scripts/install.mjs",
+    "uninstall:local": "node scripts/uninstall.mjs",
+    "browser:install": "PLAYWRIGHT_BROWSERS_PATH=.local/browsers playwright install chromium"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "0.34.52",
+    "ajv": "8.20.0",
+    "commander": "15.0.0",
+    "fontkit": "2.0.4",
+    "playwright": "1.63.0",
+    "roughjs": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/fontkit": "2.0.9",
+    "@types/node": "26.6.4",
+    "typescript": "7.0.2"
+  }
+}

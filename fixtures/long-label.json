@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "long-label",
+  "title": "Readable labels",
+  "nodes": [
+    {
+      "id": "long",
+      "label": "A long conceptual label that wraps at word boundaries\nAn explicit second paragraph stays intact",
+      "shape": "roundedRectangle",
+      "width": 270
+    },
+    {
+      "id": "short",
+      "label": "Check readability",
+      "shape": "ellipse"
+    }
+  ],
+  "edges": [
+    {
+      "id": "link",
+      "source": "long",
+      "target": "short",
+      "direction": "none",
+      "label": "related to"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "bad-layout",
+  "title": "Repair demonstration",
+  "nodes": [
+    {
+      "id": "a",
+      "label": "First concept",
+      "position": {
+        "x": 80,
+        "y": 150
+      },
+      "pinned": true
+    },
+    {
+      "id": "b",
+      "label": "Second concept",
+      "position": {
+        "x": 90,
+        "y": 155
+      },
+      "pinned": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "source": "a",
+      "target": "b",
+      "direction": "forward",
+      "label": "informs"
+    }
+  ],
+  "layout": {
+    "strategy": "manual"
+  }
+}
