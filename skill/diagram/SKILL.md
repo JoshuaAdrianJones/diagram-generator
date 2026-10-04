@@ -1,6 +1,6 @@
 ---
 name: diagram
-description: Create and revise local sketch concept maps and feedback loops from conversation or notes, inspect screenshots, and return a browser preview plus SVG and PNG exports.
+description: Create and revise local diagrams and shared canvases with independent views, panels, lanes, and visual regions; inspect screenshots and return a browser preview plus SVG and PNG exports.
 ---
 
 # Diagram
@@ -34,3 +34,17 @@ If the user asks for `spec-only`, write and validate the specification with `val
 7. Run `preview --diagram <id> --open` and `export --diagram <id> --format svg,png`. Return the working URL, absolute export links, and any material inference or unresolved warning. Keep the response brief. The user never needs to paste JSON.
 
 The CLI's review checks prevent stale publication and missing evidence. They cannot prove that you looked at an image. Your review record must describe the work you actually did.
+
+## Shared canvases and modeling choices
+
+Use a version 2 canvas when the user requests several diagrams together, overview/detail views, comparison panels, scenario panels, time horizons, or nested models. Read the application canvas, canvas-patch, graph, and graph-patch schemas. Keep the specification internal. A canvas owns independent graph snapshots. Do not combine their edges into one graph or imply automatic synchronization. Explain abstraction changes with labeled canvas links whose source names the relevant frame and optional element IDs. Record link provenance as supplied or inferred.
+
+Choose a model from the supplied relationships. Use path for a single nonbranching sequence, DAG for directed acyclic dependencies, network for feedback and other relationships, and lanes for explicitly supplied ordered horizons. Do not invent edges, omit cycles, or change direction to fit a model. Use independent overview and detail graphs when abstraction differs. Groups remain within a graph. Regions contain frames visually and do not define expandable models.
+
+Default to sketch and a consistent theme. Use clean when requested. Choose a different per-frame theme only when it helps the requested comparison or the user asks. Circular nodes can have outside labels and captions. Panels support headings, paragraphs, quotations, and lists with emphasis. Time horizons remain supplied labels and captions, not inferred calendar dates. Concentric regions require explicit frame positions and clear labels.
+
+Run `canvas create --spec`, or `canvas status --canvas` followed by `canvas revise --canvas --patch --base`. Import saved published diagrams with `canvas add-diagram` and an exact source revision. Ordinary revisions preserve unrelated frame and graph positions and sketch seeds. Moving a frame changes its canvas placement only. Request graph relayout through a targeted graph patch; request canvas relayout only to rearrange the composition.
+
+Follow the existing render, inspect, repair, and publish workflow using `canvas` commands. Open the actual canvas overview and every frame detail tile in the screenshot manifest. Check each model's meaning, labels, arrow direction, captions, panel text, and layout. Also check frame overlap, explanatory-link ownership, source selection outlines, region containment, and canvas labels. Repair the affected frame or canvas placement without changing unrelated content. Capture another region if ownership or text cannot be checked at the supplied scale. Never record unread images as inspected.
+
+Publish the exact candidate only after the overview and all frame tiles pass review. If blockers remain after three repairs, preserve the previous published canvas and report unresolved findings. Return the `/c/<id>` preview URL and canvas SVG/PNG exports. Export individual frames when requested; they omit canvas explanatory links. Keep subject matter, screenshots, and review records local.
