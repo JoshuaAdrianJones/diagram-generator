@@ -137,7 +137,7 @@ const checkSpec = ajv.compile(DiagramSpecSchema);
 const checkPatch = ajv.compile(PatchSchema);
 export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 
-export function hashSpec(spec: DiagramSpec): string {
+export function hashSpec(spec: unknown): string {
   function ordered(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(ordered);
     if (value !== null && typeof value === 'object') {
