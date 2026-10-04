@@ -16,10 +16,10 @@ export interface RevisionMetadata {
   publishedAt?: string;
   restoredFrom?: string;
 }
-export interface RevisionRecord extends RevisionMetadata {
+export interface RevisionRecord<S = DiagramSpec, L = LayoutState> extends RevisionMetadata {
   path: string;
-  spec: DiagramSpec;
-  layout?: LayoutState;
+  spec: S;
+  layout?: L;
   unchanged?: boolean;
 }
 export interface ReviewRecord {
@@ -44,7 +44,7 @@ interface ScreenshotManifest {
   diagramId: string;
   revisionId: string;
   specHash: string;
-  images: Array<{ path: string; kind: string }>;
+  images: Array<{ path: string; kind: string; frameId?: string; rect?: {x:number;y:number;width:number;height:number}; pixelScale?:number }>;
 }
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const SAFE_REVISION = /^r[0-9]{6,12}$/;
@@ -83,17 +83,24 @@ function relativeArtifact(root: string, name: string): string {
   return path.join(root, name);
 }
 
-export class DiagramStore {
+export interface StoreContract<S, P> {
+  collection: 'diagrams' | 'canvases';
+  assert(input: unknown): S;
+  apply(input: S, patch: P): S;
+  reviewCoverage?(layout: any, images: Array<{path: string; kind: string; frameId?: string; rect?: {x:number;y:number;width:number;height:number}; pixelScale?:number}>, inspected: Set<string>): void;
+}
+
+export class DiagramStore<S extends {id: string; title: string} = DiagramSpec, P = Patch, L = LayoutState> {
   readonly dataRoot: string;
-  constructor(dataRoot = defaultDataRoot()) { this.dataRoot = path.resolve(dataRoot); }
-  diagramPath(diagramId: string): string { assertId(diagramId); return path.join(this.dataRoot, 'diagrams', diagramId); }
+  constructor(dataRoot = defaultDataRoot(), private readonly contract: StoreContract<S, P> = { collection: 'diagrams', assert: assertSpec, apply: applyPatch } as unknown as StoreContract<S, P>) { this.dataRoot = path.resolve(dataRoot); }
+  diagramPath(diagramId: string): string { assertId(diagramId); return path.join(this.dataRoot, this.contract.collection, diagramId); }
   candidatePath(diagramId: string, revisionId: string): string { assertId(revisionId, true); return path.join(this.diagramPath(diagramId), 'attempts', revisionId); }
   revisionPath(diagramId: string, revisionId: string): string { assertId(revisionId, true); return path.join(this.diagramPath(diagramId), 'revisions', revisionId); }
 
   private async locked<T>(diagramId: string, action: () => Promise<T>): Promise<T> {
     const lockRoot = path.join(this.dataRoot, 'locks');
     await mkdir(lockRoot, { recursive: true });
-    const lock = path.join(lockRoot, `${diagramId}.lock`);
+    const lock = path.join(lockRoot, `${this.contract.collection}-${diagramId}.lock`);
     assertId(diagramId);
     try { await mkdir(lock); }
     catch (error) {
@@ -120,31 +127,31 @@ export class DiagramStore {
       if (owner?.token === token) await rm(lock, { recursive: true, force: true });
     }
   }
-  private async record(directory: string): Promise<RevisionRecord> {
+  private async record(directory: string): Promise<RevisionRecord<S, L>> {
     const metadata = await readJson<RevisionMetadata>(path.join(directory, 'metadata.json'));
-    const spec = assertSpec(await readJson(path.join(directory, 'spec.json')));
+    const spec = this.contract.assert(await readJson(path.join(directory, 'spec.json')));
     if (hashSpec(spec) !== metadata.specHash) throw new DiagramError(`Specification hash mismatch in ${directory}`, 'invalid_saved_data', 2);
-    const layout = await optionalJson<LayoutState>(path.join(directory, 'layout.json'));
+    const layout = await optionalJson<L>(path.join(directory, 'layout.json'));
     return { ...metadata, path: directory, spec, ...(layout ? { layout } : {}) };
   }
-  async readRevision(diagramId: string, revisionId: string): Promise<RevisionRecord> {
+  async readRevision(diagramId: string, revisionId: string): Promise<RevisionRecord<S, L>> {
     return this.record(this.revisionPath(diagramId, revisionId));
   }
-  async readCandidate(diagramId: string, revisionId: string): Promise<RevisionRecord> {
+  async readCandidate(diagramId: string, revisionId: string): Promise<RevisionRecord<S, L>> {
     const published = await optionalJson<RevisionMetadata>(path.join(this.revisionPath(diagramId, revisionId), 'metadata.json'));
     if (published) return this.readRevision(diagramId, revisionId);
     return this.record(this.candidatePath(diagramId, revisionId));
   }
-  async readAny(diagramId: string, revisionId: string): Promise<RevisionRecord> { return this.readCandidate(diagramId, revisionId); }
-  async latest(diagramId: string): Promise<RevisionRecord | null> {
+  async readAny(diagramId: string, revisionId: string): Promise<RevisionRecord<S, L>> { return this.readCandidate(diagramId, revisionId); }
+  async latest(diagramId: string): Promise<RevisionRecord<S, L> | null> {
     const pointer = await optionalJson<LatestPointer>(path.join(this.diagramPath(diagramId), 'latest.json'));
     return pointer ? this.readRevision(diagramId, pointer.revisionId) : null;
   }
-  async current(diagramId: string): Promise<RevisionRecord> {
+  async current(diagramId: string): Promise<RevisionRecord<S, L>> {
     const metadata = await readJson<DiagramMetadata>(path.join(this.diagramPath(diagramId), 'diagram.json'));
     return this.readCandidate(diagramId, metadata.headRevision);
   }
-  private async newCandidate(metadata: DiagramMetadata, spec: DiagramSpec, base: RevisionRecord | null, restoredFrom?: string): Promise<RevisionRecord> {
+  private async newCandidate(metadata: DiagramMetadata, spec: S, base: RevisionRecord<S, L> | null, restoredFrom?: string): Promise<RevisionRecord<S, L>> {
     // A crash can leave a complete attempt before the head metadata was replaced.
     // Reserve beyond those orphaned attempts instead of blocking future revisions.
     let counter = metadata.counter;
@@ -175,8 +182,8 @@ export class DiagramStore {
     } finally { await rm(stage, { recursive: true, force: true }); }
     return { ...record, path: destination, spec };
   }
-  async create(input: DiagramSpec): Promise<RevisionRecord> {
-    const spec = assertSpec(input);
+  async create(input: S): Promise<RevisionRecord<S, L>> {
+    const spec = this.contract.assert(input);
     return this.locked(spec.id, async () => {
       const directory = this.diagramPath(spec.id);
       try { await mkdir(directory); }
@@ -192,18 +199,18 @@ export class DiagramStore {
       } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
     });
   }
-  async revise(diagramId: string, patch: Patch, baseRevision: string): Promise<RevisionRecord> {
+  async revise(diagramId: string, patch: P, baseRevision: string): Promise<RevisionRecord<S, L>> {
     assertId(baseRevision, true);
     return this.locked(diagramId, async () => {
       const metadata = await readJson<DiagramMetadata>(path.join(this.diagramPath(diagramId), 'diagram.json'));
       if (metadata.headRevision !== baseRevision) throw this.conflict(diagramId, baseRevision, metadata.headRevision);
       const base = await this.readCandidate(diagramId, baseRevision);
-      const spec = applyPatch(base.spec, patch);
+      const spec = this.contract.apply(base.spec, patch);
       if (hashSpec(spec) === base.specHash) return { ...base, unchanged: true };
       return this.newCandidate(metadata, spec, base);
     });
   }
-  async restore(diagramId: string, sourceRevision: string, baseRevision?: string): Promise<RevisionRecord> {
+  async restore(diagramId: string, sourceRevision: string, baseRevision?: string): Promise<RevisionRecord<S, L>> {
     return this.locked(diagramId, async () => {
       const metadata = await readJson<DiagramMetadata>(path.join(this.diagramPath(diagramId), 'diagram.json'));
       if (baseRevision && metadata.headRevision !== baseRevision) throw this.conflict(diagramId, baseRevision, metadata.headRevision);
@@ -251,7 +258,7 @@ export class DiagramStore {
       await rm(path.join(candidate.path, 'failure.json'), { force: true });
     });
   }
-  async publish(diagramId: string, revisionId: string, review: ReviewRecord): Promise<RevisionRecord> {
+  async publish(diagramId: string, revisionId: string, review: ReviewRecord): Promise<RevisionRecord<S, L>> {
     return this.locked(diagramId, async () => {
       const metadata = await readJson<DiagramMetadata>(path.join(this.diagramPath(diagramId), 'diagram.json'));
       if (metadata.headRevision !== revisionId) throw this.conflict(diagramId, revisionId, metadata.headRevision);
@@ -284,7 +291,7 @@ export class DiagramStore {
       return this.readRevision(diagramId, revisionId);
     });
   }
-  private async checkReview(candidate: RevisionRecord, review: ReviewRecord): Promise<void> {
+  private async checkReview(candidate: RevisionRecord<S, L>, review: ReviewRecord): Promise<void> {
     const reject = (message: string, code = 'review_required', exitCode = 3): never => { throw new DiagramError(message, code, exitCode); };
     if (!review || review.revisionId !== candidate.revisionId || review.specHash !== candidate.specHash) reject('Review revision or specification hash does not match the candidate.', 'stale_review', 5);
     if (review.status !== 'verified') reject(`Candidate review status is ${review.status ?? 'missing'}. Only visually verified candidates can be published.`);
@@ -296,7 +303,7 @@ export class DiagramStore {
       try { const info = await lstat(relativeArtifact(candidate.path, name)); if (!info.isFile() || info.size === 0) reject(`Required artifact is empty or invalid: ${name}`); }
       catch (error) { if (error instanceof DiagramError) throw error; reject(`Required artifact is missing: ${name}`); }
     }
-    const layout = await readJson<LayoutState>(path.join(candidate.path, 'layout.json'));
+    const layout = await readJson<L & {specHash: string}>(path.join(candidate.path, 'layout.json'));
     if (layout.specHash !== candidate.specHash) reject('Layout specification hash does not match the candidate.', 'stale_review', 5);
     const diagnostics = await readJson<Finding[]>(path.join(candidate.path, 'diagnostics.json'));
     if (!Array.isArray(diagnostics) || diagnostics.some(finding => finding.severity === 'error')) reject('Blocking geometry diagnostics remain.');
@@ -304,6 +311,7 @@ export class DiagramStore {
     if (manifest.diagramId !== candidate.diagramId || manifest.revisionId !== candidate.revisionId || manifest.specHash !== candidate.specHash) reject('Screenshot manifest revision or specification hash does not match the candidate.', 'stale_review', 5);
     if (!Array.isArray(manifest.images)) reject('The screenshot manifest has no images.');
     const inspected = new Set(review.inspectedImages);
+    this.contract.reviewCoverage?.(layout, manifest.images, inspected);
     if (!manifest.images.some(image => image.kind === 'overview' && inspected.has(image.path))) reject('The candidate overview screenshot must be inspected.');
     const root = await realpath(candidate.path);
     for (const imagePath of review.inspectedImages) {
