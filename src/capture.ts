@@ -7,7 +7,7 @@ import { DiagramError, type Finding } from './schema.js';
 import { browserPath, atomicJson, readJson } from './paths.js';
 import { startServer } from './server.js';
 
-export interface ScreenshotImage { path:string;kind:'overview'|'detail'|'debug'|'preview';rect:Bounds;findingIds:string[];pixelScale:number }
+export interface ScreenshotImage { path:string;kind:'overview'|'detail'|'debug'|'preview';rect:Bounds;findingIds:string[];pixelScale:number;frameId?:string }
 export interface ScreenshotManifest {diagramId:string;revisionId:string;specHash:string;viewport:{width:number;height:number};pixelScale:number;images:ScreenshotImage[]}
 let registryRoot:string|undefined;
 export async function launchBrowser() {
@@ -46,21 +46,37 @@ async function setCrop(page:Page,rect:Bounds,scale=1,debugSvg?:string,background
   },{rect,width,height,debugSvg,background});
   await page.evaluate(()=>document.fonts.ready);
 }
-export async function renderPng(root:string,record:any,bounds:Bounds,filename:string,scale=1,background?:string) {
-  return withBrowser(root,async(page,url)=>{await readyPage(page,`${url}/capture/${record.diagramId}/${record.revisionId}`,record);await setCrop(page,bounds,scale,undefined,background);await page.locator('#drawing').screenshot({path:filename,omitBackground:true});return filename;});
+export async function renderPng(root:string,record:any,bounds:Bounds,filename:string,scale=1,background?:string,svg?:string) {
+  return withBrowser(root,async(page,url)=>{await readyPage(page,`${url}/${record.spec.kind==='canvas'?'capture-canvas':'capture'}/${record.diagramId}/${record.revisionId}`,record);await setCrop(page,bounds,scale,svg,background);await page.locator('#drawing').screenshot({path:filename,omitBackground:true});return filename;});
 }
-export async function captureRevision(root:string,record:any,layout:any,findings:Finding[],options:{region?:Bounds;debug?:boolean;preview?:boolean;scale?:number;outputDir?:string}={}) {
+export async function renderPngSet(root:string,record:any,images:Array<{bounds:Bounds;filename:string;scale:number;svg:string}>) {
+  return withBrowser(root,async(page,url)=>{
+    await readyPage(page,`${url}/${record.spec.kind==='canvas'?'capture-canvas':'capture'}/${record.diagramId}/${record.revisionId}`,record);
+    for(const image of images){await setCrop(page,image.bounds,image.scale,image.svg);await page.locator('#drawing').screenshot({path:image.filename,omitBackground:true});}
+  });
+}
+export async function captureRevision(root:string,record:any,layout:any,findings:Finding[],options:{region?:Bounds;debug?:boolean;preview?:boolean;scale?:number;outputDir?:string;frameId?:string}={}) {
   const bounds:Bounds=layout.bounds || layout.viewport || layout.viewportBounds || layout.documentBounds;
   if(!bounds)throw new DiagramError('Layout has no document bounds.','layout_state_invalid',3);
   const outputDir=options.outputDir||record.path;
   const directory=path.join(outputDir,'screenshots');await mkdir(directory,{recursive:true});
   const manifest:ScreenshotManifest={diagramId:record.diagramId,revisionId:record.revisionId,specHash:record.specHash,viewport:{width:1440,height:1000},pixelScale:options.scale||1,images:[]};
   await withBrowser(root,async(page,url)=>{
-    await readyPage(page,`${url}/capture/${record.diagramId}/${record.revisionId}`,record);
-    const save=async(name:string,kind:ScreenshotImage['kind'],rect:Bounds,scale:number,findingIds:string[]=[],debugSvg?:string)=>{await setCrop(page,rect,scale,debugSvg);await page.locator('#drawing').screenshot({path:path.join(directory,name),omitBackground:true});manifest.images.push({path:'screenshots/'+name,kind,rect,findingIds,pixelScale:scale});};
-    if(options.region){await save('region-'+Date.now()+'.png','detail',options.region,options.scale||1);return;}
+    await readyPage(page,`${url}/${record.spec.kind==='canvas'?'capture-canvas':'capture'}/${record.diagramId}/${record.revisionId}`,record);
+    const save=async(name:string,kind:ScreenshotImage['kind'],rect:Bounds,scale:number,findingIds:string[]=[],debugSvg?:string,frameId?:string)=>{await setCrop(page,rect,scale,debugSvg);await page.locator('#drawing').screenshot({path:path.join(directory,name),omitBackground:true});manifest.images.push({path:'screenshots/'+name,kind,rect,findingIds,pixelScale:scale,...frameId?{frameId}:{} });};
+    if(options.region){await save('region-'+Date.now()+'.png','detail',options.region,options.scale||1,[],undefined,options.frameId);return;}
     const overviewScale=Math.min(options.scale||1,1600/bounds.width,1200/bounds.height);manifest.pixelScale=overviewScale;await save('overview.png','overview',bounds,overviewScale);
-    if(overviewScale<.85){let count=0;const stepX=1100,stepY=800;
+    if(record.spec.kind==='canvas'){
+      let count=0;
+      for(const frame of Object.values(layout.frames) as Bounds[]){
+        const id=(frame as any).id;
+        for(let y=frame.y;y<frame.y+frame.height;y+=800)for(let x=frame.x;x<frame.x+frame.width;x+=1100){
+          if(++count>100)throw new DiagramError('Canvas needs more than 100 readable frame tiles. Narrow the canvas.','tile_limit',3);
+          await save('frame-'+id+'-'+count+'.png','detail',{x,y,width:Math.min(1200,frame.x+frame.width-x),height:Math.min(900,frame.y+frame.height-y)},1,[],undefined,id);
+        }
+      }
+    }
+    if(record.spec.kind!=='canvas'&&overviewScale<.85){let count=0;const stepX=1100,stepY=800;
       for(let y=bounds.y;y<bounds.y+bounds.height;y+=stepY)for(let x=bounds.x;x<bounds.x+bounds.width;x+=stepX){
         if(++count>100)throw new DiagramError('Diagram needs more than 100 readable tiles. Narrow the diagram view.','tile_limit',3);
         await save('detail-'+count+'.png','detail',{x,y,width:Math.min(1200,bounds.x+bounds.width-x),height:Math.min(900,bounds.y+bounds.height-y)},1);
@@ -72,7 +88,7 @@ export async function captureRevision(root:string,record:any,layout:any,findings
       await save('finding-'+index+'.png','detail',rect,1,[finding.code+':'+finding.ids.join(',')]);
     }
     if(options.debug)await save('debug.png','debug',bounds,overviewScale,findings.map(f=>f.code+':'+f.ids.join(',')),await readFile(path.join(record.path,'debug.svg'),'utf8'));
-    if(options.preview){await page.setViewportSize({width:1440,height:1000});await readyPage(page,`${url}/d/${record.diagramId}?revision=${record.revisionId}`,record);await page.screenshot({path:path.join(directory,'preview.png')});manifest.images.push({path:'screenshots/preview.png',kind:'preview',rect:bounds,findingIds:[],pixelScale:1});}
+    if(options.preview){await page.setViewportSize({width:1440,height:1000});await readyPage(page,`${url}/${record.spec.kind==='canvas'?'c':'d'}/${record.diagramId}?revision=${record.revisionId}`,record);await page.screenshot({path:path.join(directory,'preview.png')});manifest.images.push({path:'screenshots/preview.png',kind:'preview',rect:bounds,findingIds:[],pixelScale:1});}
   });
   if(options.region){let previous;try{previous=await readJson<ScreenshotManifest>(path.join(outputDir,'screenshots.json'))}catch{}if(previous&&previous.specHash===record.specHash)manifest.images=[...previous.images,...manifest.images];}
   await atomicJson(path.join(outputDir,'screenshots.json'),manifest);return manifest;
