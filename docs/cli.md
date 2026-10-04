@@ -54,3 +54,38 @@ The default root is `~/Library/Application Support/sketch-diagram`, overridden b
 Use `cleanup --diagram <id> --age-days 7` to remove older failed inactive attempts. Cleanup preserves the current head and all public revisions. Candidate region captures join that candidate's screenshot manifest and may supply review evidence. Extra captures of an already published revision live under `captures/<id>/<revision>/<timestamp>/` and do not modify the retained review bundle. Portable revision contents use relative artifact paths; installation metadata alone records application paths.
 
 The preview server exposes read-only diagram routes on loopback. It serves consistent published bundles with fresh metadata and revision-qualified assets. Labels are escaped text, and the spec cannot execute HTML, JavaScript, shell commands, or external resources.
+
+## Shared canvases
+
+Canvas commands use `sketch-diagram canvas <command>` and `--canvas <id>`. All data remains local in the configured data directory. Existing diagram commands also accept version 2 graph specs and patches.
+
+```sh
+sketch-diagram canvas create --spec <canvas-spec.json>
+sketch-diagram canvas validate --spec <canvas-spec.json>
+sketch-diagram canvas status --canvas <id>
+sketch-diagram canvas revise --canvas <id> --patch <canvas-patch.json> --base <revision>
+sketch-diagram canvas render --canvas <id>
+sketch-diagram canvas inspect --canvas <id> --revision <candidate> --debug --preview-page
+sketch-diagram canvas capture --canvas <id> --revision <candidate> --frame <frame-id>
+sketch-diagram canvas publish --canvas <id> --revision <candidate> --review <review.json>
+sketch-diagram canvas preview --canvas <id> --open
+sketch-diagram canvas export --canvas <id> --format svg,png
+sketch-diagram canvas export --canvas <id> --frame <frame-id> --background transparent --scale 2
+sketch-diagram canvas history --canvas <id>
+sketch-diagram canvas restore --canvas <id> --revision <published> --base <current>
+sketch-diagram canvas cleanup --canvas <id> --age-days 7
+```
+
+`capture --region` accepts `overview` or `x,y,width,height`. `--frame` selects a frame crop. `inspect` captures every frame at readable scale and tiles large frames. A review must identify every generated frame tile and the overview. Published captures are written outside immutable revision bundles.
+
+Canvas exports default to the latest published revision. Use `--draft --revision <candidate>` for an explicitly unverified export. `--out` selects the export directory. Frame exports omit canvas explanatory links and selection outlines. Fonts are embedded and text remains selectable. Export PNGs are 1x or 2x with the existing 32 megapixel and 16,000 pixel side limits. Preview PNGs may be reduced to fit those limits; the render result reports the canvas preview scale. SVG and readable tiled review remain available for large canvases.
+
+Import an exact published diagram revision as an independent frame snapshot:
+
+```sh
+sketch-diagram canvas add-diagram --canvas <id> --diagram <diagram-id> --revision <published> --frame <new-frame-id> --base <canvas-head> --position 32,120
+```
+
+The position is optional for automatically arranged canvases. The imported graph retains source revision provenance and does not change when its source is edited. Browser previews use `/c/<id>` with frame selection, Fit frame, Overview, explanatory-link navigation, pan, zoom, refresh, and exports. The server remains read-only and bound to loopback.
+
+`schema --out <directory>` now exports all six version 1 and version 2 schema files.

@@ -88,3 +88,11 @@ Publication rejects mismatched revision/hash, missing reviewed overview evidence
 Exit codes are `0` for success, `2` for schema/reference validation, `3` for layout blockers, `4` for dependencies/browser failures, and `5` for revision conflicts. A warning may accompany a successful command. Read the structured result rather than treating empty terminal output as success.
 
 On a conflict, read the latest state and apply the user's intended change against that base. On a render/capture failure, keep the last successful public revision available. Failed attempts remain separate from public history. A user may explicitly request draft export, but that draft remains unverified.
+
+## Canvas workflow
+
+Use the same launcher with `canvas` before the command. Canvas commands require `--canvas <id>` where diagram commands require `--diagram <id>`. `create --spec`, `revise --patch --base`, `render`, `inspect --revision`, `publish --revision --review`, `preview --open`, `export`, `status`, `history`, `restore`, and `cleanup` follow the existing revision workflow. Canvas reviews use the same record fields. The screenshot manifest must include an inspected overview and every readable `frameId` detail tile.
+
+Read the application schemas `canvas.schema.json`, `canvas-patch.schema.json`, `graph.schema.json`, and `graph-patch.schema.json` before writing version 2 documents. Use `canvas capture --canvas <id> --revision <candidate> --frame <id>` for another frame crop. `canvas export --canvas <id> --frame <id>` produces standalone SVG and PNG without explanatory links. `canvas add-diagram --canvas <id> --diagram <source-id> --revision <published-source> --frame <new-id> --base <canvas-head>` copies an exact published snapshot. Imported content does not synchronize.
+
+A canvas review must inspect all frame tiles at readable scale, even if the overall overview is small. Record only images actually opened. Large canvas render PNGs may be reduced previews; SVG exports retain full resolution. Requested 1x/2x PNG exports that exceed the pixel limit fail explicitly. Keep source notes, real diagrams, captures, provenance, and review records in ignored local working directories or outside the repository.
