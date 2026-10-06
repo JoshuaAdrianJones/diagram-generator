@@ -1,5 +1,20 @@
 # Sketch Diagram
 
+## Portable Agent skill
+
+Install in Claude Code from GitHub:
+
+```text
+/plugin marketplace add https://github.com/JoshuaAdrianJones/diagram-generator
+/plugin install sketch-diagram@sketch-diagram-marketplace
+```
+
+Restart Claude Code, then invoke `/sketch-diagram:diagram`. First use builds the pinned application into a separate cache and installs Chromium. It requires Node.js `>=22.19.0 <27`, npm, and network access. See [plugin installation, updates, and platform requirements](docs/skill-installation.md#install-from-github-as-a-plugin).
+
+Run `npm run package:skill` to build the application and skill into distributable ZIPs under `artifacts/packages/`. The skill ZIP supports Claude Code, Claude.ai, and Codex. The plugin ZIP packages the same skill for ChatGPT web distribution. See [installation instructions and platform requirements](docs/skill-installation.md).
+
+The bundles include the compiled application, source, pinned runtime dependencies, schemas, fonts, and synthetic examples. They require a supported Node runtime. Chromium enables PNG exports and screenshot review. Web environments without Chromium can return draft SVGs. Account installation and web execution depend on host capabilities.
+
 Create and revise diagrams and shared canvases from natural-language prompts in Codex. The included `diagram` skill builds a diagram specification, runs the local renderer, inspects screenshots, and repairs layout before publishing a reviewed revision. Open the result in a local browser or export SVG and PNG.
 
 The renderer uses TypeScript, Rough.js, bundled fonts, and Playwright. Rendering and storage run locally. Codex handles the language reasoning in your session.
