@@ -1,6 +1,6 @@
 # CLI and review workflow
 
-Use `node <skill-directory>/scripts/launcher.mjs` followed by the commands below. The installed skill's `install.json` locates the application. All commands accept `--json`, return absolute artifact paths, and write logs to stderr. Treat command output as the source of candidate IDs and hashes.
+Use `node <skill-directory>/scripts/launcher.mjs` followed by the commands below. For a portable bundle, `scripts/setup.mjs --json` locates the application. A checkout-linked installation uses `install.json`. All commands accept `--json`, return absolute artifact paths, and write logs to stderr. Treat command output as the source of candidate IDs and hashes.
 
 Read the application's generated `schemas/diagram.schema.json` and `schemas/patch.schema.json` for exact fields. The TypeScript definitions in `src/schema.ts` generate those schemas. JSON files are internal artifacts. Do not ask the user to author them.
 

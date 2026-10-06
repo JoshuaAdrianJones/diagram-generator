@@ -1,11 +1,17 @@
 ---
 name: diagram
 description: Create and revise local diagrams and shared canvases with independent views, panels, lanes, and visual regions; inspect screenshots and return a browser preview plus SVG and PNG exports.
+metadata:
+  runtime: Requires Node.js >=22.19.0 <27 and shell execution. Portable bundles need tar. Full review and PNG export require Playwright Chromium and image inspection.
 ---
 
 # Diagram
 
-Turn the user's model into a saved diagram with the installed `sketch-diagram` application. Keep the specification internal. The user gives natural-language instructions and receives a preview and exports.
+For a Claude Code plugin installed from this repository, the source application root contains `.claude-plugin/plugin.json`, two directories above this skill. Read [references/runtime.md](references/runtime.md), then run `node <skill-directory>/scripts/setup.mjs --browser --json` on first use. It builds the pinned source into a separate cache and reports the runtime application root. Invoke the plugin as `/sketch-diagram:diagram`. Do not run `install:local` for a Claude plugin. A ZIP distribution with `bundle.json` uses its prebuilt runtime instead.
+
+Turn the user's model into a saved diagram with the `sketch-diagram` application. Use this skill in Codex, Claude Code, or a web assistant with code execution. Keep the specification internal. The user gives natural-language instructions and receives a preview and exports supported by the host.
+
+If `bundle.json` exists in this skill directory, read [references/runtime.md](references/runtime.md) first. Run `scripts/setup.mjs --json` to resolve the bundled application root. Check runtime and browser capabilities before choosing the full workflow or draft SVG mode. For a checkout-linked installation, `install.json` records the application root. Web hosts return downloadable files. A remote loopback URL is not a user-accessible preview.
 
 Read [references/cli.md](references/cli.md) for commands, the review contract, and failure handling. Resolve the launcher relative to this skill's directory. Invoke `node <skill-directory>/scripts/launcher.mjs <command> --json`, with paths passed as separate arguments. The launcher finds the application through installation metadata and works from any current directory.
 
@@ -17,7 +23,7 @@ Extract concepts, relationships, groups, and notes faithfully. Preserve explicit
 
 For a concept map, use its focus question to select and organise the supplied concepts. A labelled relationship should read as a meaningful proposition. These heuristics follow Novak and Cañas. Keep model fidelity separate from visual readability, following Munzner's validation approach. [references/design.md](references/design.md) contains the sources and practical guidance.
 
-Use stable IDs and the application's schemas. `install.json` records the application root. Read `<application-root>/schemas/diagram.schema.json` when translating the model, and `<application-root>/schemas/patch.schema.json` for revisions. Choose a supported initial layout and default sketch theme. Ordinary revisions preserve positions and seeds. Set an explicit relayout request only when the user asks to rearrange the map. Use a small local position or routing patch for repairs, with pinned positions treated as hard constraints.
+Use stable IDs and the application's schemas at the resolved application root. Read `<application-root>/schemas/diagram.schema.json` when translating the model, and `<application-root>/schemas/patch.schema.json` for revisions. Choose a supported initial layout and default sketch theme. Ordinary revisions preserve positions and seeds. Set an explicit relayout request only when the user asks to rearrange the map. Use a small local position or routing patch for repairs, with pinned positions treated as hard constraints.
 
 For a new diagram, write the specification to an accessible temporary file and run `create --spec <path>`. For a revision, use `status --diagram <id>` and inspect the current spec/layout, write a validated patch, and run `revise --diagram <id> --patch <path> --base <revision>`. Preserve unrelated content. A stale base is a conflict to resolve, not permission to overwrite.
 

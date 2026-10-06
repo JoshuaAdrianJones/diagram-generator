@@ -34,7 +34,8 @@ program.command('doctor').description('Check runtime, fonts, browser, data, and 
   for(const name of ['Bangers-Regular.ttf','Caveat-Regular.ttf','NotoSans-Variable.ttf','Bangers-OFL.txt','Caveat-OFL.txt','NotoSans-OFL.txt'])checks.push({name:'font:'+name,ok:existsSync(path.join(appRoot,'assets/fonts',name))});
   try{await mkdir(root(),{recursive:true});await access(root(),constants.W_OK);checks.push({name:'data',ok:true,path:root()})}catch(error){checks.push({name:'data',ok:false,message:(error as Error).message})}
   try{const browser=await launchBrowser();await browser.close();checks.push({name:'browser',ok:true,path:browserPath()})}catch(error){checks.push({name:'browser',ok:false,message:(error as Error).message})}
-  try{const installed=await readJson(path.join(appRoot,'.installation.json'));checks.push({name:'integration',ok:existsSync(installed.binPath)&&existsSync(path.join(installed.skillPath,'SKILL.md')),skillPath:installed.skillPath,binPath:installed.binPath,discovery:installed.discovery});}catch{checks.push({name:'integration',ok:false,message:'Run npm run install:local to install the reusable CLI and skill.'})}
+  if(existsSync(path.join(appRoot,'.bundle-ready.json')))checks.push({name:'integration',ok:true,mode:'portable_bundle'});
+  else try{const installed=await readJson(path.join(appRoot,'.installation.json'));checks.push({name:'integration',ok:existsSync(installed.binPath)&&existsSync(path.join(installed.skillPath,'SKILL.md')),skillPath:installed.skillPath,binPath:installed.binPath,discovery:installed.discovery});}catch{checks.push({name:'integration',ok:false,message:'Run npm run install:local to install the reusable CLI and skill.'})}
   if(checks.some(c=>!c.ok))process.exitCode=4;
   return {status:checks.every(c=>c.ok)?'ok':'dependency_failure',applicationRoot:appRoot,dataRoot:root(),checks};
 }));
