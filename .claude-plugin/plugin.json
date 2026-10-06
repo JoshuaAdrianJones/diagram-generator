@@ -1,0 +1,8 @@
+{
+  "name": "sketch-diagram",
+  "version": "1.0.0",
+  "description": "Create and revise sketch diagrams and shared canvases with reviewed SVG and PNG exports.",
+  "author": { "name": "Sketch Diagram maintainers" },
+  "repository": "https://github.com/JoshuaAdrianJones/diagram-generator",
+  "skills": "./skill/"
+}

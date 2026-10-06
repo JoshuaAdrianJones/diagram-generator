@@ -1,0 +1,12 @@
+{
+  "name": "sketch-diagram-marketplace",
+  "owner": { "name": "Sketch Diagram maintainers" },
+  "metadata": { "description": "Sketch Diagram plugin marketplace" },
+  "plugins": [
+    {
+      "name": "sketch-diagram",
+      "source": "./",
+      "description": "Create and revise sketch diagrams and shared canvases with reviewed SVG and PNG exports."
+    }
+  ]
+}

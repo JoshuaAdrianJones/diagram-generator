@@ -8,6 +8,7 @@
   "bin": { "sketch-diagram": "bin/sketch-diagram.mjs" },
   "scripts": {
     "build": "tsc",
+    "test:claude-plugin": "node scripts/test-claude-plugin.mjs",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "test:integration-install": "node scripts/test-integration.mjs",
     "doctor": "node bin/sketch-diagram.mjs doctor --json",
